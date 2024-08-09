@@ -9,7 +9,7 @@ layout: default
 
 > **I am always open to new opportunities(except for web3 and blockchain). I'm particularly interested in relocating to other countries, especially Europe, Canada, or the United States. If you are interested in working with me, please feel free to contact me.**
 
-My name is Rustin Liu and I’m a passionate software engineer who specializes in distributed systems and dev tools.
+My name is Rustin and I’m a passionate software engineer who specializes in distributed systems and dev tools.
 
 As a software engineer at [PingCAP], my main focus is on enhancing [TiDB], which is an open-source distributed SQL database. I am also a core maintainer of [TiCDC], which is a Change Data Capture (CDC) system for [TiDB].
 

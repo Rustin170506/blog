@@ -32,7 +32,7 @@ as [Creative Commons CC BY 4.0](https://creativecommons.org/licenses/by/4.0/lega
 The code powering the site is licensed as:
 
     Copyright 2017 Jake Wharton
-    Copyright 2019 Rustin Liu
+    Copyright 2019 Rustin
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
