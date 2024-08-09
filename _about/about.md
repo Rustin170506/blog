@@ -5,9 +5,9 @@ layout: default
 
 <img src="https://mir-s3-cdn-cf.behance.net/project_modules/disp/7df0bd42774743.57ee5f32bd76e.gif" width="100">
 
-[![Resume][resume-badge]][resume] [![GitHub][github-badge]][github] [![Linkedin][linkedin-badge]][linkedin] [![Website][website-badge]][website] [![Twitter][twitter-badge]][twitter] [![YouTube][you-tube-badge]][you-tube]
+[![GitHub][github-badge]][github] [![Website][website-badge]][website]
 
-> **I am always open to new opportunities(except for web3 and blockchain). I'm particularly interested in relocating to other countries, especially Europe, Canada, or the United States. If you are interested in working with me, please feel free to contact me.**
+> **I am always open to new opportunities. I'm particularly interested in relocating to other countries, especially Europe, Canada, or the United States. If you are interested in working with me, please feel free to contact me.**
 
 My name is Rustin and I’m a passionate software engineer who specializes in distributed systems and dev tools.
 
@@ -52,20 +52,12 @@ Languages I speak:
 
 You can contact me by clicking badges above or below badges, or e-mailing me directly. My email address is on my GitHub profile.
 
-[![Resume][resume-badge]][resume] [![GitHub][github-badge]][github] [![Linkedin][linkedin-badge]][linkedin] [![Website][website-badge]][website] [![Twitter][twitter-badge]][twitter] [![YouTube][you-tube-badge]][you-tube]
+[![GitHub][github-badge]][github] [![Website][website-badge]][website]
 
-[resume-badge]: https://img.shields.io/badge/Résumé-f48300?style=for-the-badge&logoColor=white&logo=rust
-[resume]: https://github.com/rustin-hgw-xx-7/resume/blob/main/resume.pdf
 [github-badge]: https://img.shields.io/badge/GitHub-black?style=for-the-badge&logoColor=white&logo=github
 [github]: https://github.com/rustin-hgw-xx-7
-[linkedin-badge]: https://img.shields.io/badge/LinkedIn-0077B5?style=for-the-badge&logo=linkedin&logoColor=white
-[linkedin]: https://www.linkedin.com/in/rustin-hgw-xx-7
 [website-badge]: https://img.shields.io/badge/Website-000000?style=for-the-badge&logoColor=white&logo=google-chrome
 [website]: https://hgw-xx-7.dev
-[twitter-badge]: https://img.shields.io/badge/Twitter-1DA1F2?style=for-the-badge&logoColor=white&logo=twitter
-[twitter]: https://twitter.com/hi_rustin
-[you-tube-badge]: https://img.shields.io/badge/YouTube-FF0000?style=for-the-badge&logoColor=white&logo=youtube
-[you-tube]: https://www.youtube.com/@rustin-hgw-xx-7
 [PingCAP]: https://www.pingcap.com/
 [TiDB]: https://github.com/pingcap/tidb
 [TiCDC]: https://github.com/pingcap/tiflow
