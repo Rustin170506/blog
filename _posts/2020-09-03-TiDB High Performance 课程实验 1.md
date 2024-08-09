@@ -11,9 +11,9 @@ tags:
 - tikv
 ---
 
-大家好，我是 [Rustin](https://github.com/hi-rustin). 最近开始做贵司推出的 TiDB High Performance 课程，所以开个课程实验记录的坑！
+大家好，我是 [Rustin](https://github.com/rustin-hgw-xx-7). 最近开始做贵司推出的 TiDB High Performance 课程，所以开个课程实验记录的坑！
 
-此博客在 [GitHub](https://github.com/hi-rustin/blog) 上公开发布. 如果您有任何问题或疑问，请在此处打开一个 [issue](https://github.com/hi-rustin/blog/issues).
+此博客在 [GitHub](https://github.com/rustin-hgw-xx-7/blog) 上公开发布. 如果您有任何问题或疑问，请在此处打开一个 [issue](https://github.com/rustin-hgw-xx-7/blog/issues).
 
 ## 简介
 
@@ -28,7 +28,7 @@ tags:
 ### 编译 TiDB
 
 ```sh
-git clone https://github.com/hi-rustin/tidb
+git clone https://github.com/rustin-hgw-xx-7/tidb
 ```
 在编译之前，需要我们安装 **make** 工具，因为三个项目的 build 都是用 makefile 来组织的。查看 makefile 可以看到 `.PHONY` 中有个 server
 的伪目标。内容如下：
@@ -61,7 +61,7 @@ make server
 ### 编译 TiKV
 
 ```sh
-git clone https://github.com/hi-rustin/tikv
+git clone https://github.com/rustin-hgw-xx-7/tikv
 ```
 
 在编译之前我也是需要安装好 build TiKV 项目工具链，可以在 [CONTRIBUTING](https://github.com/tikv/tikv/blob/master/CONTRIBUTING.md) 里面找到一些需要的依赖。
@@ -92,7 +92,7 @@ examples         libcmd.rlib      tikv-ctl.dSYM    tikv-server.dSYM
 ### 编译 PD
 
 ```sh
-git clone https://github.com/hi-rustin/pd
+git clone https://github.com/rustin-hgw-xx-7/pd
 ```
 
 PD 中也没有特殊的编译工具链要求，直接使用查看 makefile 找到编译的命令：

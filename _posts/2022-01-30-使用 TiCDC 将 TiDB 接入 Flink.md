@@ -1,8 +1,8 @@
 ---
-title: '使用 TiCDC 将 TiDB 数据接入 Flink' 
+title: '使用 TiCDC 将 TiDB 数据接入 Flink'
 layout: post
 
-categories: post 
+categories: post
 tags:
 - TiCDC
 - TiDB
@@ -16,8 +16,8 @@ tags:
 
 我来介绍一下目前 TiCDC 接入 Flink 的现状和方法。
 
-此博客在 [GitHub](https://github.com/hi-rustin/blog) 上公开发布.
-如果您有任何问题或疑问，请在此处打开一个 [issue](https://github.com/hi-rustin/blog/issues).
+此博客在 [GitHub](https://github.com/rustin-hgw-xx-7/blog) 上公开发布.
+如果您有任何问题或疑问，请在此处打开一个 [issue](https://github.com/rustin-hgw-xx-7/blog/issues).
 
 ## 简介
 
@@ -99,7 +99,7 @@ RUN wget -P /opt/flink/lib/ https://repo1.maven.org/maven2/org/apache/flink/flin
 我们克隆该仓库之后在根目录通过一条命令就可以启动一个 Kafka 和 Flink 集群。
 
 ```shell
-git clone https://github.com/hi-rustin/ticdc-test-compose
+git clone https://github.com/rustin-hgw-xx-7/ticdc-test-compose
 cd ticdc-test-compose
 docker-compose -f ./docker-compose-flink.yaml up -d
 ```
@@ -194,15 +194,15 @@ CREATE TABLE topic_test
 
 对于这条命令，我们需要关注 WITH 中的这些参数：
 
-| 参数名                            | 说明                                                                 |
-|--------------------------------|--------------------------------------------------------------------|
-| connector                      | 指定我们使用 Kafka connector                                             |
-| topic                          | 新建的这张表数据从 Kafka 的哪个 Topic 获取                                       |
+| 参数名                         | 说明                                                                                            |
+| ------------------------------ | ----------------------------------------------------------------------------------------------- |
+| connector                      | 指定我们使用 Kafka connector                                                                    |
+| topic                          | 新建的这张表数据从 Kafka 的哪个 Topic 获取                                                      |
 | properties.bootstrap.servers   | Kafka Broker 的连接地址，因为我们在 docker-compose 用了 bridge 的网络，所以使用服务名加端口即可 |
-| properties.group.id            | Kafka 消费组 ID                                                       |
-| scan.startup.mode              | Kafka consumer 的启动模式，从可能的最早偏移量开始                                   |
-| format                         | 使用 `canal-json` 协议解析消息                                             |
-| canal-json.ignore-parse-errors | 忽略掉解析错误，这在跳过和忽略一些不支持的 DDL 和 DML 时很有用                               |
+| properties.group.id            | Kafka 消费组 ID                                                                                 |
+| scan.startup.mode              | Kafka consumer 的启动模式，从可能的最早偏移量开始                                               |
+| format                         | 使用 `canal-json` 协议解析消息                                                                  |
+| canal-json.ignore-parse-errors | 忽略掉解析错误，这在跳过和忽略一些不支持的 DDL 和 DML 时很有用                                  |
 
 该命令执行成功之后我们就可以查询数据了：
 
@@ -229,7 +229,7 @@ from topic_test;
 
 [v5.4 分支]: https://github.com/pingcap/tiflow/tree/release-5.4
 
-[ticdc-test-compose]: https://github.com/hi-rustin/ticdc-test-compose
+[ticdc-test-compose]: https://github.com/rustin-hgw-xx-7/ticdc-test-compose
 
 [Kafka Sink]: https://docs.pingcap.com/tidb/stable/manage-ticdc#configure-sink-uri-with-kafka
 
