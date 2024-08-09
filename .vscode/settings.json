@@ -5,7 +5,7 @@
         "MD024": false
     },
     "workbench.colorTheme": "GitHub Dark Default",
-    "window.autoDetectColorScheme": true,
+    "window.autoDetectColorScheme": false,
     "editor.fontSize": 14,
     "cSpell.words": [
         "Leetcode"

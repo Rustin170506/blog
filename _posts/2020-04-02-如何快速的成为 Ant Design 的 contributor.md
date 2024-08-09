@@ -41,7 +41,7 @@ tags:
     - 需要注意的是，我们在给 antd 提交 issue 报告时不能直接去仓库的 issue 位置开启一个报告，我们需要在 antd 的 [issue 小助手](https://new-issue.ant.design/) 上面提交问题，
     为什么我们需要这样做呢？因为大型的开源项目，可能都会收到上百成千的 issue，但是这些 issue 提的风格迥异，会对社区协作者造成很大的困扰，用户和社区互相折磨。
     - 关于如何创建一个好的 Bug 的报告，可以看看这两篇文章：[How-To-Ask-Questions-The-Smart-Way](https://github.com/ryanhanwu/How-To-Ask-Questions-The-Smart-Way) 和 [如何有效地报告 Bug](https://www.chiark.greenend.org.uk/~sgtatham/bugs-cn.html)。
-    
+
 基本上我们得到这些要素信息之后，我们就可以开始尝试去给社区做一些简单的贡献，下面我就通过一个例子给大家演示下一个 PR 的合并过程。
 
 ## 挑选问题，开始挑战
@@ -70,7 +70,7 @@ antd 就有这样被[标记的问题](https://github.com/ant-design/ant-design/i
 
 因为我觉得也许这个功能对于 antd 来说本身没有什么影响，所以我就提交了[这份代码](https://github.com/ant-design/ant-design/pull/22688/commits/fa3b1c66b33b3bc0c5f8eb1b267317114d05dd48)。
 在 antd 中提交 PR，跟提交问题报告一样也需要遵循一份 PR 的提交模板，这份模板是放在 [.github 目录下的](https://github.com/ant-design/ant-design/blob/master/.github/PULL_REQUEST_TEMPLATE.md),
-它也有[中文版](https://github.com/ant-design/ant-design/blob/master/.github/PULL_REQUEST_TEMPLATE/pr_cn.md)，所以我就不再描述里面的内容，因为我觉得还是比较清晰的。 
+它也有[中文版](https://github.com/ant-design/ant-design/blob/master/.github/PULL_REQUEST_TEMPLATE/pr_cn.md)，所以我就不再描述里面的内容，因为我觉得还是比较清晰的。
 我的 PR 是修复 Bug，所以根据我们从贡献指南中获取到的信息来说，我们应该创建一个 PR 到 master 分支并填好 PR 的[相关信息](https://github.com/ant-design/ant-design/pull/22688)：
 
 ![](../static/files/post-images/2020-04-02/pr.png){:height="550px" width="800px"}
@@ -143,14 +143,14 @@ antd 就有这样被[标记的问题](https://github.com/ant-design/ant-design/i
 
 ### 文章链接
 
-文章首发于： [Rustin 的博客](https://hi-rustin.rs/)
+文章首发于： [Rustin 的博客](https://hgw-xx-7.dev/)
 
 同步更新：
 
 [知乎](https://zhuanlan.zhihu.com/p/123367842)
-  
+
 [简书](https://www.jianshu.com/p/77471d5d4afb)
-    
+
 [掘金](https://juejin.im/post/5e872cf3f265da480836a8e7)
-    
+
 [segmentfault](https://segmentfault.com/a/1190000022259063)

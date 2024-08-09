@@ -61,7 +61,7 @@ You can contact me by clicking badges above or below badges, or e-mailing me dir
 [linkedin-badge]: https://img.shields.io/badge/LinkedIn-0077B5?style=for-the-badge&logo=linkedin&logoColor=white
 [linkedin]: https://www.linkedin.com/in/hi-rustin
 [website-badge]: https://img.shields.io/badge/Website-000000?style=for-the-badge&logoColor=white&logo=google-chrome
-[website]: https://hi-rustin.rs
+[website]: https://hgw-xx-7.dev
 [twitter-badge]: https://img.shields.io/badge/Twitter-1DA1F2?style=for-the-badge&logoColor=white&logo=twitter
 [twitter]: https://twitter.com/hi_rustin
 [you-tube-badge]: https://img.shields.io/badge/YouTube-FF0000?style=for-the-badge&logoColor=white&logo=youtube

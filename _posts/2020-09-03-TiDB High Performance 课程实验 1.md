@@ -216,7 +216,7 @@ mysql> show warnings;
 
 ### 输出到日志
 
-后来题目改了要求，需要将 `hell transation` 输出到日志当中。输出到日志当中也十分简单，可以同样在 `simple.go` 的 **executeRollback** 
+后来题目改了要求，需要将 `hell transation` 输出到日志当中。输出到日志当中也十分简单，可以同样在 `simple.go` 的 **executeRollback**
 找到如何打印日志的例子：
 
 ```go
@@ -226,7 +226,7 @@ func (e *SimpleExec) executeRollback(s *ast.RollbackStmt) error {
 	// ...
 
 	logutil.BgLogger().Debug("execute rollback statement", zap.Uint64("conn", sessVars.ConnectionID))
-	
+
     // ...
 }
 ```
@@ -271,14 +271,14 @@ func (e *SimpleExec) executeBegin(ctx context.Context, s *ast.BeginStmt) error {
 
 ### 文章链接
 
-文章首发于： [Rustin 的博客](https://hi-rustin.rs/)
+文章首发于： [Rustin 的博客](https://hgw-xx-7.dev/)
 
 同步更新：
 
 [知乎]()
-  
+
 [简书]()
-    
+
 [掘金]()
-    
+
 [segmentfault]()

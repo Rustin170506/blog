@@ -19,7 +19,7 @@ tags:
 然后提了一个 [PR](https://github.com/pingcap/tidb/pull/16262) （CEO 半夜 review 代码，哈哈哈）修复。在这个 PR 中 [zz-jason 大神](https://github.com/zz-jason) 评论希望能够通过静态检查工具来检测无效的类型转换。
 
 我经过一些研究，决定使用 [unconvert](https://github.com/mdempsky/unconvert) 来检测无效的类型转换，然后在这个 [PR](https://github.com/pingcap/tidb/pull/16549) 解决了这个问题。
-**最近我终于有机会在公司写 Go了，所以我也想在公司的项目上配置和使用一些静态检查工具来提升代码质量。** 在经过一下午的努力之后终于把 TiDB 的大部分检查工具移植到了公司项目上，并且在 github 上创建了一个模板项目 
+**最近我终于有机会在公司写 Go了，所以我也想在公司的项目上配置和使用一些静态检查工具来提升代码质量。** 在经过一下午的努力之后终于把 TiDB 的大部分检查工具移植到了公司项目上，并且在 github 上创建了一个模板项目
 [go-boilerplate](https://github.com/hi-rustin/go-boilerplate) 。下面我就简单介绍一下这个模板的构建过程和使用的方式。
 
 ## init 项目，添加代码
@@ -121,7 +121,7 @@ FILES     := $$(find $$($(PACKAGE_DIRECTORIES)) -name "*.go")
 
 这些通用的变量中有两个地方需要注意：
    - 我们定义了一个 FAIL_ON_STDOUT 的 [awk](https://zh.wikipedia.org/zh-hans/AWK) 命令，该命令会检测是否有错误信息输出，我们在后面会多次使用到该命令。NR 是内置的变量表示 number of record。如果我们检测到其他输出信息就失败退出（**输出信息也就是错误信息，我们会做输出重定向**）。
-   - 我们匹配和查找出了包下的所有 go 文件，因为我这只是个简单的模板项目没有其他的 package，所以我在 [sed](https://zh.wikipedia.org/wiki/Sed) 中只替换和匹配了第一层 package：`sed 's|github.com/hi-rustin/$(PROJECT)||'`。如果你有很多子 package，就需要修改这个替换规则。 
+   - 我们匹配和查找出了包下的所有 go 文件，因为我这只是个简单的模板项目没有其他的 package，所以我在 [sed](https://zh.wikipedia.org/wiki/Sed) 中只替换和匹配了第一层 package：`sed 's|github.com/hi-rustin/$(PROJECT)||'`。如果你有很多子 package，就需要修改这个替换规则。
 
 
 ## 添加工具，创建命令
@@ -152,7 +152,7 @@ go mod init github.com/hi-rustin/go-boilerplate/_tools
 
 有了该模块，我们就可以将工具直接编译到其目录下来使用。下面我就开始介绍目前我的模板项目中用到的一些很有帮助的检查工具：
 
-1.gofmt 
+1.gofmt
 
 ```text
 fmt:
@@ -294,7 +294,7 @@ warningCode = -1
 [rule.unreachable-code]
 ```
 
-8.evt 
+8.evt
 
 ```text
 vet:
@@ -400,7 +400,7 @@ check: fmt errcheck unconvert lint tidy check-static vet staticcheck goword
 
 我们整合出了两个命令，一个是 check 它会执行所有的检测任务，另外一个是 dev 它不仅可以进行检查还跑了单元测试。我们在开发完成之后就可以进行检测并提交，甚至将其作为 CI 任务运行。
 
-**到此为止，我们就基本完善了项目的静态检查工具链。该项目在 github 整理作为 [template 项目](https://github.com/hi-rustin/go-boilerplate) 开源，大家可以直接使用 [github template](https://github.com/hi-rustin/go-boilerplate/generate) 功能初始化你的项目。** 
+**到此为止，我们就基本完善了项目的静态检查工具链。该项目在 github 整理作为 [template 项目](https://github.com/hi-rustin/go-boilerplate) 开源，大家可以直接使用 [github template](https://github.com/hi-rustin/go-boilerplate/generate) 功能初始化你的项目。**
 希望这篇文章对你集成静态代码分析工具有帮助！
 
 ---
@@ -410,14 +410,14 @@ check: fmt errcheck unconvert lint tidy check-static vet staticcheck goword
 
 ### 文章链接
 
-文章首发于： [Rustin 的博客](https://hi-rustin.rs/)
+文章首发于： [Rustin 的博客](https://hgw-xx-7.dev/)
 
 同步更新：
 
 [知乎]()
-  
+
 [简书]()
-    
+
 [掘金]()
-    
+
 [segmentfault]()

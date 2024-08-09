@@ -3,7 +3,7 @@ const compareImages = require('resemblejs/compareImages');
 const puppeteer = require('puppeteer');
 
 const localHost = 'http://localhost:4000';
-const productionHost = 'https://hi-rustin.rs';
+const productionHost = 'https://hgw-xx-7.dev';
 
 async function loadAndCapture(page, url) {
   await page.goto(url, {
@@ -71,9 +71,9 @@ async function crawlCaptureAndCompare(path, browser, width, height) {
     }
 
     const links = (await localPage.$$eval('a', nodes => nodes.map(n => n.href)))
-        .filter(link => link.startsWith(localHost))
-        .map(link => link.substring(localHost.length).replace(/#.*$/g, ''))
-        .filter(link => !link.startsWith('/static/'));
+      .filter(link => link.startsWith(localHost))
+      .map(link => link.substring(localHost.length).replace(/#.*$/g, ''))
+      .filter(link => !link.startsWith('/static/'));
     const uniqueLinks = [...new Set(links)]; // dedupe
     console.log(`  found links ${uniqueLinks}`)
     urls.push(...uniqueLinks);
