@@ -12,7 +12,7 @@ tags:
 
 我近半年的时间都在做 [TiCDC] [Sink 模块]的改造工作，目前新的 Sink 实现已经成功替换了旧的实现。最近有客户希望通过自己实现 Sink 的方式来接入 TiCDC，所以我想把这段时间的改造和设计经验分享出来，希望能帮助到大家。
 
-此博客在 [GitHub](https://github.com/rustin-hgw-xx-7/hgw-xx-7.dev) 上公开发布。 如果您有任何问题，请在此处打开一个 [issue](https://github.com/rustin-hgw-xx-7/hgw-xx-7.dev/issues)。
+此博客在 [GitHub](https://github.com/Rustin170506/hgw-xx-7.dev) 上公开发布。 如果您有任何问题，请在此处打开一个 [issue](https://github.com/Rustin170506/hgw-xx-7.dev/issues)。
 
 > ⚠️ 注意：
 > 1. 该指南主要面向开发者，如果您只是想使用 TiCDC，请参阅 [TiCDC 使用文档](https://docs.pingcap.com/zh/tidb/stable/ticdc-overview)。

@@ -11,7 +11,7 @@ tags:
 
 大家好，我是 Rustin。今天想跟大家介绍下如何快速的成为 antd 的贡献者，希望能够对想要加入 antd 社区贡献的同学有帮助！
 
-此博客在 [GitHub](https://github.com/rustin-hgw-xx-7/blog) 上公开发布. 如果您有任何问题或疑问，请在此处打开一个 [issue](https://github.com/rustin-hgw-xx-7/blog/issues)。
+此博客在 [GitHub](https://github.com/Rustin170506/blog) 上公开发布. 如果您有任何问题或疑问，请在此处打开一个 [issue](https://github.com/Rustin170506/blog/issues)。
 
 ## 简介
 

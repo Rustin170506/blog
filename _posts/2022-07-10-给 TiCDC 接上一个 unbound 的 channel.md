@@ -15,7 +15,7 @@ tags:
 
 虽然这个库看上去实现很简单，但是我在实际使用过程中并不是很顺利。下面我就介绍一下我在使用该库时遇到的问题和进行的思考。
 
-此博客在 [GitHub](https://github.com/rustin-hgw-xx-7/hgw-xx-7.dev) 上公开发布。 如果您有任何问题或疑问，请在此处打开一个 [issue](https://github.com/rustin-hgw-xx-7/hgw-xx-7.dev/issues)。
+此博客在 [GitHub](https://github.com/Rustin170506/hgw-xx-7.dev) 上公开发布。 如果您有任何问题或疑问，请在此处打开一个 [issue](https://github.com/Rustin170506/hgw-xx-7.dev/issues)。
 
 ## 简介
 该库由 golang 社区非常活跃的 [changkun] 编写，托管在他组建的 [golang-design] 组织下。
