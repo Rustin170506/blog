@@ -3,13 +3,10 @@ title: 'About Me'
 layout: default
 ---
 
-<img src="https://mir-s3-cdn-cf.behance.net/project_modules/disp/7df0bd42774743.57ee5f32bd76e.gif" width="100">
-
-[![GitHub][github-badge]][github] [![Website][website-badge]][website]
-
+[![GitHub][github-badge]][github] [![Linkedin][linkedin-badge]][linkedin] [![Website][website-badge]][website]
 > **I am always open to new opportunities. I'm particularly interested in relocating to other countries, especially Europe, Canada, or the United States. If you are interested in working with me, please feel free to contact me.**
 
-My name is Rustin and I’m a passionate software engineer who specializes in distributed systems and dev tools.
+My name is Rustin Liu and I’m a passionate software engineer who specializes in distributed systems and dev tools.
 
 As a software engineer at [PingCAP], my main focus is on enhancing [TiDB], which is an open-source distributed SQL database. I am also a core maintainer of [TiCDC], which is a Change Data Capture (CDC) system for [TiDB].
 
@@ -52,10 +49,12 @@ Languages I speak:
 
 You can contact me by clicking badges above or below badges, or e-mailing me directly. My email address is on my GitHub profile.
 
-[![GitHub][github-badge]][github] [![Website][website-badge]][website]
+[![GitHub][github-badge]][github] [![Linkedin][linkedin-badge]][linkedin] [![Website][website-badge]][website]
 
 [github-badge]: https://img.shields.io/badge/GitHub-black?style=for-the-badge&logoColor=white&logo=github
 [github]: https://github.com/Rustin170506
+[linkedin-badge]: https://img.shields.io/badge/LinkedIn-0077B5?style=for-the-badge&logo=linkedin&logoColor=white
+[linkedin]: https://www.linkedin.com/in/rustin-liu
 [website-badge]: https://img.shields.io/badge/Website-000000?style=for-the-badge&logoColor=white&logo=google-chrome
 [website]: https://hgw-xx-7.dev
 [PingCAP]: https://www.pingcap.com/
