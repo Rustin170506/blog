@@ -14,12 +14,10 @@ I am also a big believer in open source. I contribute to the Rust community, whe
 
 - Package management
   - [Cargo] - Cargo downloads your Rust package’s dependencies, compiles your packages, makes distributable packages.
-  - [crates.io](https://github.com/rust-lang/crates.io) - The Rust package registry.
+  - [Rustup] - The Rust toolchain installer.
 - Async Runtime
   - [console] - A debugger for async rust!
   - [tokio-console-web] - A web-based debugger for async rust!
-
-I used to be a maintainer of [Rustup], which is a toolchain manager for Rust.
 
 Programming languages I primarily code in:
 
