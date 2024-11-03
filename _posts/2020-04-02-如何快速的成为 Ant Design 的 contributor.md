@@ -143,7 +143,7 @@ antd 就有这样被[标记的问题](https://github.com/ant-design/ant-design/i
 
 ### 文章链接
 
-文章首发于： [Rustin 的博客](https://hgw-xx-7.dev/)
+文章首发于： [Rustin 的博客](https://rustin.me/)
 
 同步更新：
 

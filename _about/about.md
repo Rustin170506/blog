@@ -54,7 +54,7 @@ You can contact me by clicking badges above or below badges, or e-mailing me dir
 [linkedin-badge]: https://img.shields.io/badge/LinkedIn-0077B5?style=for-the-badge&logo=linkedin&logoColor=white
 [linkedin]: https://www.linkedin.com/in/rustin-liu
 [website-badge]: https://img.shields.io/badge/Website-000000?style=for-the-badge&logoColor=white&logo=google-chrome
-[website]: https://hgw-xx-7.dev
+[website]: https://rustin.me
 [PingCAP]: https://www.pingcap.com/
 [TiDB]: https://github.com/pingcap/tidb
 [TiCDC]: https://github.com/pingcap/tiflow

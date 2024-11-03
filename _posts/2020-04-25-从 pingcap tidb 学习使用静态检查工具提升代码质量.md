@@ -410,7 +410,7 @@ check: fmt errcheck unconvert lint tidy check-static vet staticcheck goword
 
 ### 文章链接
 
-文章首发于： [Rustin 的博客](https://hgw-xx-7.dev/)
+文章首发于： [Rustin 的博客](https://rustin.me/)
 
 同步更新：
 
