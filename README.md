@@ -11,17 +11,38 @@ Development
 Ensure you have the correct version of Ruby installed (per `.ruby-version`). Also ensure you have the Bundler gem
 installed.
 
+```sh
+# Install rbenv
+brew install rbenv
+
+# Initialize rbenv
+rbenv init
+
+# Add to ~/.zshrc or ~/.bash_profile
+echo 'eval "$(rbenv init -)"' >> ~/.zshrc
+
+# Install Ruby version from .ruby-version
+rbenv install $(cat .ruby-version)
+
+# Install bundler
+gem install bundler:2.4.10
+```
+
 One-time setup
 --------------
 
-    bundle install
+```sh
+bundle install
+```
 
 _Note: If you're on Mac OS and this fails installing nokogiri, run `brew unlink xz`, install, and then `brew link xz`._
 
 Running the site
 ----------------
 
-    bundle exec jekyll serve
+```sh
+bundle exec jekyll serve
+```
 
 License
 =======
