@@ -147,6 +147,23 @@ I also tested the `analyze table` command on a partitioned table containing 100 
 
 The results from this large-scale test validate our earlier findings - increasing `tidb_build_stats_concurrency` provides significant performance improvements, while `tidb_analyze_partition_concurrency` has a relatively minor impact on overall execution time.
 
+While our initial findings suggest that `tidb_build_stats_concurrency` is the dominant factor in performance optimization, let's examine a different scenario to validate this hypothesis.
+
+## Wide Table
+
+I tested the `analyze table` command on a wide table containing 500 partitions and 200 columns and 3 million rows. Here are the results:
+
+| `tidb_build_stats_concurrency` | `tidb_analyze_partition_concurrency` | `analyze table` Time    |
+|--------------------------------|--------------------------------------|-------------------------|
+| 2                              | 2                                    | 1 hour 17 min 57.55 sec |
+| 15                             | 2                                    | 1 hour 15 min 30.46 sec |
+| 2                              | 15                                   | 34 min 31.38 sec        |
+| 15                             | 15                                   | 34 min 56.99 sec        |
+
+The execution time is influenced by both parameters, with `tidb_analyze_partition_concurrency` having a more significant impact compared to the small partition table test. This is because the increased number of columns creates a bottleneck during the statistics persistence phase.
+
+These settings are hard to tune correctly. Optimal configuration requires deep understanding of both the collection and persistence phases for your specific workload. Additionally, since these parameters are cluster-wide settings rather than table-specific, finding ideal values that work well across different table schemas becomes challenging.
+
 ## Conclusion
 
-From the tests, we can see that adjusting these two parameters is actually quite challenging. Based on our test results, it seems that `tidb_build_stats_concurrency` primarily influences the performance of the `ANALYZE` operation. Therefore, I suggest merging these two parameters to reduce confusion. Since the name `tidb_build_stats_concurrency` is quite misleading, I propose keeping only `tidb_analyze_partition_concurrency` to control the concurrency of both functionalities.
+From our tests, we can see that adjusting these two parameters is actually quite challenging. While `tidb_build_stats_concurrency` dominates performance for partitioned tables, our wide table test shows that `tidb_analyze_partition_concurrency` can have a more significant impact in certain scenarios. To simplify configuration, I recommend merging these parameters. Since `tidb_analyze_partition_concurrency` better describes the overall functionality of controlling parallelism during statistics collection, we should keep this parameter and deprecate `tidb_build_stats_concurrency`. This will make tuning more straightforward while still providing the necessary control over concurrency for different table types.
