@@ -147,8 +147,6 @@ I also tested the `analyze table` command on a partitioned table containing 100 
 
 The results from this large-scale test validate our earlier findings - increasing `tidb_build_stats_concurrency` provides significant performance improvements, while `tidb_analyze_partition_concurrency` has a relatively minor impact on overall execution time.
 
-> **Note:** Interestingly, when testing on v8.1.0, I observed the opposite behavior - `tidb_analyze_partition_concurrency` had the dominant performance impact. This is because v8.1.0's statistics persistence phase takes significantly longer, and `tidb_analyze_partition_concurrency` controls the number of concurrent workers for persisting partition statistics. Therefore, increasing the number of persistence workers yielded substantial performance gains by parallelizing the storage writes.
-
 ## Conclusion
 
-From the tests, we can see that adjusting these two parameters is actually quite challenging. Based on our test results, it seems that `tidb_build_stats_concurrency` primarily influences the performance of the `ANALYZE` operation. However, from my testing on version v8.1.0, it was `tidb_analyze_partition_concurrency` that had the dominant impact. Therefore, I suggest merging these two parameters to reduce confusion. Since the name `tidb_build_stats_concurrency` is quite misleading, I propose keeping only `tidb_analyze_partition_concurrency` to control the concurrency of both functionalities.
+From the tests, we can see that adjusting these two parameters is actually quite challenging. Based on our test results, it seems that `tidb_build_stats_concurrency` primarily influences the performance of the `ANALYZE` operation. Therefore, I suggest merging these two parameters to reduce confusion. Since the name `tidb_build_stats_concurrency` is quite misleading, I propose keeping only `tidb_analyze_partition_concurrency` to control the concurrency of both functionalities.
