@@ -26,7 +26,9 @@ However, these parameters have several drawbacks:
 
 In this blog post, we will discuss the issues with the current parameters and propose a solution to merge them into one.
 
-# Test Result - Small Partition Table
+# Test Result
+
+## Small Partition Table
 
 To evaluate the performance impact of these parameters, I benchmarked an `analyze table` command on a partitioned table containing 100 partitions and 30 million rows. Here are the results:
 
@@ -47,7 +49,35 @@ The following sections will prove this point by showing the `analyze_jobs` table
 
 ## Analysis
 
-Let's take a closer look at the `analyze table` command execution details.
+Before we dive into the details, let's first take a look at the analysis model of TiDB.
+
+### Collection Phase
+
+![analyze_plan_builder](https://www.plantuml.com/plantuml/svg/jPAnRi8m48PtFyM97LLbP420XDIHhGlBuHp4mh6ZktCfVVh69844PUdG2N7-y_tVMLwB8ckgl9bj0lhR3y7UOu1jShuWdW4ARFPRcA_opnAEUGu8s8Nh7CPGW6L29L2KYy0Xd283eIsRmT7JMusiJbqCfeCzsdRVP9F6hcct1D7815hIgCDiTZ3l9IHPIoB6d3cc6cmCDZ5JK7_hFsfxvLaiTyAgF_-CV25-ptN8EggxjaVthGxXYauXR_ECj5kQCMcA_OYNz7eF3JdpXK8n8ZD9yerFpDF-doqn1F9J6oo66rpRqT_C5rFC_p5lXn_DvvvuADwbo_Paol-5Do9De9aikI-Q4cprKrsWKbPG9-giP76vYLBLFPtEEJ_9XmbwtrtoFNzomKbfA1I3S4Ly9ZZxU4G_vBiJ1AA21ja92uks9BEcKAJA_m80)
+
+Here's how TiDB's analyze workflow works:
+
+1. The Analyze Plan Builder splits the work into tasks by table/partition
+2. Multiple analyze workers run these tasks in parallel
+3. Each worker:
+   - Processes its assigned data independently
+   - Streams results back to a central handler
+   - Updates system tables with statistics as it goes
+4. After all workers finish:
+   - Global statistics are merged if needed
+   - The statistics cache gets refreshed
+
+This parallel architecture enables efficient and reliable statistics collection across the TiDB cluster. The `tidb_build_stats_concurrency` parameter plays a crucial role here by determining how many analyze workers can run simultaneously, directly impacting the throughput of partition processing.
+
+### Persistence Phase
+
+![analyze_persistence](https://www.plantuml.com/plantuml/svg/bSunJmCn30NWFR_YwNQ6Pko0oe34p0rTM4ngk5Dp3h8TgkFN4rrG1wHAi7XvzlDtC2VrkkGGXcUscls9v9HP1v3XuH5tzstkSQ7PyLOK99JNBuPkonRUjTGFf2Afgh9uNc7qoMYzFflFoK9l6KOdDumjnB7ecNMt_HYFkpqs1NpYVdpfEHe5BtBzVSsTx8mqaGZdq0fQV-_fwSI_cF3IZrTpNk3qclcsA_wuuWrN_AihTbVyfulb50vjr2L_0m00)
+
+Once data collection completes, TiDB enters the persistence phase. During this phase, the system writes the collected statistics to some system tables: `mysql.stats_meta`, `mysql.stats_buckets`, etc. The `tidb_analyze_partition_concurrency` parameter determines how many concurrent workers handle these write operations.
+
+These parameters have different but related roles. The system follows a producer-consumer pattern, with `tidb_build_stats_concurrency` as the producer controlling statistics collection, and `tidb_analyze_partition_concurrency` as the consumer managing persistence. This design means their relative impact on performance can vary significantly depending on the specific workload characteristics.
+
+Now that we understand both phases, let's dive into the execution details of the `analyze table` command to see how it works in practice.
 
 TiDB records the execution details of the `analyze table` command in the `mysql.analyze_jobs` table. The following is an example of the `analyze_jobs` table:
 
@@ -102,5 +132,23 @@ The analysis reveals that increasing `tidb_build_stats_concurrency` enables more
 
 This finding explains the significant performance impact of `tidb_build_stats_concurrency` compared to the relatively minor effect of `tidb_analyze_partition_concurrency`.
 
-# Test Result - Large Partition Table
+## Large Partition Table
 
+I also tested the `analyze table` command on a partitioned table containing 100 partitions and 2 billion rows. The results are as follows:
+
+> **Note:** Test environment: 3 TiKV nodes and 3 TiDB nodes, each with 16 cores and 32GB RAM. Same as the previous test.
+
+| `tidb_build_stats_concurrency` | `tidb_analyze_partition_concurrency` | `analyze table` Time |
+|--------------------------------|--------------------------------------|----------------------|
+| 2                              | 2                                    | 25 min 39.67 sec     |
+| 15                             | 2                                    | 10 min 58.74 sec     |
+| 2                              | 15                                   | 24 min 15.95 sec     |
+| 15                             | 15                                   | 9 min 4.36 sec       |
+
+The results from this large-scale test validate our earlier findings - increasing `tidb_build_stats_concurrency` provides significant performance improvements, while `tidb_analyze_partition_concurrency` has a relatively minor impact on overall execution time.
+
+> **Note:** Interestingly, when testing on v8.1.0, I observed the opposite behavior - `tidb_analyze_partition_concurrency` had the dominant performance impact. This is because v8.1.0's statistics persistence phase takes significantly longer, and `tidb_analyze_partition_concurrency` controls the number of concurrent workers for persisting partition statistics. Therefore, increasing the number of persistence workers yielded substantial performance gains by parallelizing the storage writes.
+
+## Conclusion
+
+From the tests, we can see that adjusting these two parameters is actually quite challenging. Based on our test results, it seems that `tidb_build_stats_concurrency` primarily influences the performance of the `ANALYZE` operation. However, from my testing on version v8.1.0, it was `tidb_analyze_partition_concurrency` that had the dominant impact. Therefore, I suggest merging these two parameters to reduce confusion. Since the name `tidb_build_stats_concurrency` is quite misleading, I propose keeping only `tidb_analyze_partition_concurrency` to control the concurrency of both functionalities.
