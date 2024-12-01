@@ -14,7 +14,7 @@ I am also a big believer in open source. I contribute to the Rust community, whe
 
 - Package management
   - [Cargo] - Cargo downloads your Rust package’s dependencies, compiles your packages, makes distributable packages.
-  - [Rustup] - The Rust toolchain installer.
+  - [crates.io] - The Rust package registry.
 - Async Runtime
   - [console] - A debugger for async rust!
   - [tokio-console-web] - A web-based debugger for async rust!
@@ -61,7 +61,7 @@ You can contact me by clicking badges above or below badges, or e-mailing me dir
 [Cargo]: https://github.com/rust-lang/cargo
 [console]: https://github.com/tokio-rs/console
 [tokio-console-web]: https://github.com/Rustin170506/tokio-console-web
-[Rustup]: https://github.com/rust-lang/rustup
+[crates.io]: https://github.com/rust-lang/crates.io
 [cargo-commits]: <https://img.shields.io/badge/Regular%20Contributor-black?logoColor=balck&logo=rust&label=Cargo&style=social>
 [crates-io-commits]: <https://img.shields.io/badge/Maintainer-black?logoColor=balck&logo=rust&label=crates.io&style=social>
 [console-commits]: <https://img.shields.io/badge/Maintainer-black?logoColor=balck&logo=rust&label=Console&style=social>
