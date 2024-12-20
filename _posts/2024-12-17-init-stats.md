@@ -85,7 +85,7 @@ From `mysql.stats_topn`: (only for indexes)
 - `value`: TopN value
 - `count`: Count of the TopN value
 
-From `mysql.stats_buckets`: (only for columns)
+From `mysql.stats_buckets`: (only for indexes)
 - `count`: Number of rows in the bucket
 - `repeats`: Number of repeated rows in the bucket
 - `lower_bound`: Lower bound of the bucket
