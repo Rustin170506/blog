@@ -12,7 +12,7 @@ tags:
 
 # Background
 
-Recently, we have been tackling the challenge of supporting 3 million tables within a single TiDB cluster. One of the most significant hurdles we've faced is optimizing the performance of statistics collection. In its current implementation, TiDB gathers basic table information from all servers and consolidates it into a single system table. While functional, this approach becomes highly inefficient when managing millions of tables, consuming excessive CPU and memory resources and taking a considerable amount of time.
+Recently, we have been tackling the challenge of supporting 3 million tables within a single TiDB cluster. One of the most significant hurdles we've faced is optimizing the performance of statistics collection. In its current implementation, TiDB gathers basic table information from all servers and consolidates it into a single system table. While functional, this approach becomes highly inefficient when managing millions of tables, consuming excessive CPU and taking a considerable amount of time.
 
 In this blog post, I’ll introduce a new batch processing approach for writing table information to the system table. This method not only improves efficiency but also significantly reduces resource consumption. Let's dive in!
 
