@@ -10,11 +10,9 @@ tags:
 - Statistics
 ---
 
-# Background
+# Statistics
 
-Statistics collection is a critical component of any modern database system, serving as the foundation for query optimization. TiDB follows this industry standard practice.
-
-In TiDB's query optimization process, statistics play a fundamental role - they are the sole source of information used to estimate query costs and determine the most efficient execution plan for each query.
+Statistics collection is a crucial component of modern database systems, forming the backbone of query optimization. In TiDB, statistics are indispensable, serving as the sole source of information for estimating query costs and selecting the most efficient execution plan.
 
 TiDB collects several types of statistics for each table, including:
 - TopN values (most frequent values)
@@ -22,9 +20,9 @@ TiDB collects several types of statistics for each table, including:
 - Number of Distinct Values (NDV)
 - Other statistical metrics
 
-These statistics will be stored in some system tables, such as `mysql.stats_top_n`, `mysql.stats_meta`, `mysql.stats_histograms`, and `mysql.stats_buckets`.
+These statistics will be stored in some system tables, such as `mysql.stats_meta`, `mysql.stats_top_n`, `mysql.stats_histograms`, and `mysql.stats_buckets`.
 
-When TiDB starts up, it needs to load these statistics from the system tables into memory - a process known as "statistics initialization". This initialization step is crucial as it provides the query optimizer with the statistical information needed to generate optimal execution plans.
+When TiDB starts, it must load these statistics from the system tables into memory, a process known as "statistics initialization." This step is crucial as it equips the query optimizer with the necessary statistical information to generate optimal execution plans.
 
 In this blog post, we will discuss the initialization process of TiDB statistics.
 
