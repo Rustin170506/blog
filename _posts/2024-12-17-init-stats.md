@@ -15,7 +15,7 @@ tags:
 Statistics collection is a crucial component of modern database systems, forming the backbone of query optimization. In TiDB, statistics are indispensable, serving as the sole source of information for estimating query costs and selecting the most efficient execution plan.
 
 TiDB collects several types of statistics for each table, including:
-- TopN values (most frequent values)
+- TopN values (most frequent values to reflect data skewness)
 - Histograms (data distribution)
 - Number of Distinct Values (NDV)
 - Other statistical metrics
@@ -32,11 +32,26 @@ In this blog post, we will discuss the initialization process of TiDB statistics
 
 In TiDB, the statistics data can be divided into three parts:
 
-1. Basic information : `modify_count`, `row_count`, `version` from `mysql.stats_meta` table.
+1. Basic information from the `mysql.stats_meta` table:
+	- `modify_count`: Number of row modifications(DELETE/INSERT/UPDATE) since the last statistics collection.
+	- `row_count`: Real-time row count of the table.
+	- `version`: Last update time of the statistics (Note: This is the update time of the stats meta row, not the last analysis time).
 2. TopN information: `value`, `count` from `mysql.stats_topn` table.
-3. Histogram information
-   1. Histogram meta: `distinct_count`, `null_count`, `modify_count`, `version`, `stats_ver` from `mysql.stats_histograms` table.
-   2. Histogram buckets: `count`, `repeats`, `lower_bound`, `upper_bound` from `mysql.stats_buckets` table.
+	- `value`: TopN value. (With data type)
+	- `count`: Count of the TopN value.
+3. Histogram meta: `is_index`, `distinct_count`, `null_count`, `version`, `stats_ver` from `mysql.stats_histograms` table.
+	- `is_index`: Whether the statistics are for an index.
+	- `distinct_count`: Number of distinct values.
+	- `null_count`: Number of NULL values.
+	- `version`: Last update time of the statistics.(The real last analysis time)
+	- `stats_ver`: Statistics format version(0, 1, 2).
+4. Histogram buckets: `count`, `repeats`, `lower_bound`, `upper_bound` from `mysql.stats_buckets` table.
+	- `count`: Number of rows in the bucket.
+	- `repeats`: Number of times the upper-bound value of the bucket appears in the data.
+	- `lower_bound`: Lower bound of the bucket.
+	- `upper_bound`: Upper bound of the bucket.
+
+When TiDB starts, it will load these statistics data from the system tables into memory.
 
 ## How TiDB Loads Statistics Data?
 
@@ -263,5 +278,29 @@ type LFU struct {
 }
 ```
 
+This `LFU` structure is a wrapper of the `ristretto.Cache` structure, which is a high-performance cache library in Go.
 
+Every time the table statistics get ejected or evicted from the cache, we will evict some items from the table's statistics. The eviction policy is based on the LRU algorithm.
 
+```go
+func (coll *HistColl) DropEvicted() {
+	for _, col := range coll.columns {
+		if !col.IsStatsInitialized() || col.GetEvictedStatus() == AllEvicted {
+			continue
+		}
+		col.DropUnnecessaryData()
+	}
+	for _, idx := range coll.indices {
+		if !idx.IsStatsInitialized() || idx.GetEvictedStatus() == AllEvicted {
+			continue
+		}
+		idx.DropUnnecessaryData()
+	}
+}
+```
+
+Basically, we just drop TopN, Histogram and mark the column or index as `AllEvicted`.
+
+But you may also notice that the `LRU` cache contains another cache layer called `resultKeySet`. This is full cache of the table's statistics.
+The reason we need this cache is that even we evict the table's statistics from the `ristretto.Cache`, we still need to know the basic information of the table, such as `modify_count`, `row_count`, `version`, etc.
+These information are stored in the `resultKeySet` cache.
