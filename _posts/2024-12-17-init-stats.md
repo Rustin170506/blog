@@ -32,30 +32,16 @@ In this blog post, we will discuss the initialization process of TiDB statistics
 
 In TiDB, the statistics data can be divided into three parts:
 
-1. Basic information from the `mysql.stats_meta` table:
-	- `modify_count`: Number of row modifications(DELETE/INSERT/UPDATE) since the last statistics collection.
-	- `row_count`: Real-time row count of the table.
-	- `version`: Last update time of the statistics (Note: This is the update time of the stats meta row, not the last analysis time).
+1. Basic information: `modify_count`, `row_count`, `version` from `mysql.stats_meta` table.
 2. TopN information: `value`, `count` from `mysql.stats_topn` table.
-	- `value`: TopN value. (With data type)
-	- `count`: Count of the TopN value.
 3. Histogram meta: `is_index`, `distinct_count`, `null_count`, `version`, `stats_ver` from `mysql.stats_histograms` table.
-	- `is_index`: Whether the statistics are for an index.
-	- `distinct_count`: Number of distinct values.
-	- `null_count`: Number of NULL values.
-	- `version`: Last update time of the statistics.(The real last analysis time)
-	- `stats_ver`: Statistics format version(0, 1, 2).
 4. Histogram buckets: `count`, `repeats`, `lower_bound`, `upper_bound` from `mysql.stats_buckets` table.
-	- `count`: Number of rows in the bucket.
-	- `repeats`: Number of times the upper-bound value of the bucket appears in the data.
-	- `lower_bound`: Lower bound of the bucket.
-	- `upper_bound`: Upper bound of the bucket.
 
 When TiDB starts, it will load these statistics data from the system tables into memory.
 
 ## How TiDB Loads Statistics Data?
 
-Since TiDB maintains extensive statistical data for each column (including 100 TopN values and 256 histogram buckets), loading all statistics at once can be resource-intensive. To address this, TiDB provides two initialization approaches:
+Since TiDB maintains extensive statistics for each column and index (including 100 TopN values and 256 histogram buckets), loading all statistics at once can be resource-intensive. To address this, TiDB provides two initialization approaches:
 
 1. A lightweight mode that quickly loads only essential statistics
 2. A comprehensive mode that loads all statistical data but takes longer to complete
@@ -69,15 +55,16 @@ In lightweight mode, TiDB loads only essential statistical information from two 
 From `mysql.stats_meta`:
 - `modify_count`: Number of row modifications
 - `row_count`: Total number of rows
-- `version`: Statistics last update time
+- `version`: Last update time of the statistics (Note: This is the update time of the stats meta row, not the last analysis time).
 
 From `mysql.stats_histograms`:
-- `stats_ver`: Statistics format version(0, 1, 2)
-- `version`: Statistics last update time
-- `distinct_count`: Number of distinct values
-- `null_count`: Number of NULL values
+- `is_index`: Whether the statistics are for an index.
+- `distinct_count`: Number of distinct values.
+- `null_count`: Number of NULL values.
+- `version`: Last update time of the statistics.(The real last analysis time)
+- `stats_ver`: Statistics format version(0, 1, 2).
 
-The purpose of loading this basic information is to provide the `modify_count` and `row_count` metrics to other modules, allowing them to track both the total number of rows in the table and how many rows have been modified.
+The purpose of loading this basic information is to provide the `modify_count` and `row_count` metrics to other modules, allowing them to track both the real-time total number of rows in the table and how many rows have been modified since the last statistics collection.
 
 ### Comprehensive Mode
 
@@ -86,29 +73,30 @@ In comprehensive mode, TiDB loads all statistical data from the system tables. T
 From `mysql.stats_meta`:
 - `modify_count`: Number of row modifications
 - `row_count`: Total number of rows
-- `version`: Statistics last update time
+- `version`: Last update time of the statistics (Note: This is the update time of the stats meta row, not the last analysis time).
 
 From `mysql.stats_histograms`:
-- `stats_ver`: Statistics format version(0, 1, 2)
-- `version`: Statistics last update time
-- `distinct_count`: Number of distinct values
-- `null_count`: Number of NULL values
+- `is_index`: Whether the statistics are for an index.
+- `distinct_count`: Number of distinct values.
+- `null_count`: Number of NULL values.
+- `version`: Last update time of the statistics.(The real last analysis time)
+- `stats_ver`: Statistics format version(0, 1, 2).
 
 From `mysql.stats_topn`: (only for indexes)
-- `value`: TopN value
-- `count`: Count of the TopN value
+- `value`: TopN value. (With data type)
+- `count`: Count of the TopN value.
 
 From `mysql.stats_buckets`: (only for indexes)
-- `count`: Number of rows in the bucket
-- `repeats`: Number of repeated rows in the bucket
-- `lower_bound`: Lower bound of the bucket
-- `upper_bound`: Upper bound of the bucket
+- `count`: Number of rows in the bucket.
+- `repeats`: Number of times the upper-bound value of the bucket appears in the data.
+- `lower_bound`: Lower bound of the bucket.
+- `upper_bound`: Upper bound of the bucket.
 
 **However, it is important to note that the comprehensive mode only loads statistics for indexes, not for columns.** For columns, TiDB will load the statistics on-demand when the column is accessed for the first time.
 
 # Maintain Statistics In Memory
 
-It seems the initialization process is straightforward: load statistics data from system tables into memory. However, maintaining these statistics in memory is a complex task that involves several challenges:
+The initialization process appears straightforward: load statistics data from system tables into memory. However, maintaining these statistics in memory is a complex task that involves several challenges:
 
 1. Find a suitable data structure to store statistics data.
 2. Manage the memory usage of statistics data.
@@ -124,56 +112,64 @@ type Table struct {
 	HistColl
 	Version uint64
 	LastAnalyzeVersion uint64
-	TblInfoUpdateTS uint64
 	...
 }
 ```
 
 - `ColAndIdxExistenceMap`: A map that indicates which columns and indexes have real statistics data to avoid unnecessary statistics loading.
 - `HistColl`: A collection of histograms for each column or index. (This is a big structure that contains all the statistical data.)
-- `Version`: The version of the statistics data.
-- `LastAnalyzeVersion`: The version of the last analyzed statistics data.
-- `TblInfoUpdateTS`: The timestamp of the last table information update.
+- `Version`: The update time of this stats meta row.
+- `LastAnalyzeVersion`: The last analysis time of the statistics.
+
+The `ColAndIdxExistenceMap` used to track which columns and indexes have real statistics data. It is a simple map that stores the column or index ID as the key and a boolean value as the value.
+
+```go
+type ColAndIdxExistenceMap struct {
+	checked     bool
+	colAnalyzed map[int64]bool
+	idxAnalyzed map[int64]bool
+}
+
+func (m *ColAndIdxExistenceMap) HasAnalyzed(id int64, isIndex bool) bool {
+	if isIndex {
+		analyzed, ok := m.idxAnalyzed[id]
+		return ok && analyzed
+	}
+	analyzed, ok := m.colAnalyzed[id]
+	return ok && analyzed
+}
+```
+
+Whenever you need to determine if an index or column has actual statistics data, you can use the `HasAnalyzed` method to check this map.
+
+> Note: We could optimize memory usage by implementing a bitmap.
+
+The `HistColl` structure is the core data structure that stores the statistics data. It contains the following information:
 
 ```go
 type HistColl struct {
-   ...
+    ...
 	columns    map[int64]*Column
 	indices    map[int64]*Index
 	PhysicalID int64
 	RealtimeCount int64
 	ModifyCount   int64
 	StatsVer int
-	Pseudo         bool
-
-	/*
-		Fields below are only used in a query, like for estimation, and they will be useless when stored in
-		the stats cache. (See GenerateHistCollFromColumnInfo() for details)
-	*/
-
-	CanNotTriggerLoad bool
-	// Idx2ColUniqueIDs maps the index id to its column UniqueIDs. It's used to calculate the selectivity in planner.
-	Idx2ColUniqueIDs map[int64][]int64
-	// ColUniqueID2IdxIDs maps the column UniqueID to a list index ids whose first column is it.
-	// It's used to calculate the selectivity in planner.
-	ColUniqueID2IdxIDs map[int64][]int64
-	// UniqueID2colInfoID maps the column UniqueID to its ID in the metadata.
-	UniqueID2colInfoID map[int64]int64
-	// MVIdx2Columns maps the index id to its columns by expression.Column.
-	// For normal index, the column id is enough, as we already have in Idx2ColUniqueIDs. But currently, mv index needs more
-	// information to match the filter against the mv index columns, and we need this map to provide this information.
-	MVIdx2Columns map[int64][]*expression.Column
+	Pseudo         bool // Pseudo is true means this HistColl is a pseudo statistics.
+	...
 }
 ```
 
-For each column, it contains the following information:
+It contains two maps: `columns` and `indices`.
+
+Each column includes the following information:
 
 ```go
 type Column struct {
 	LastAnalyzePos types.Datum
 	CMSketch       *CMSketch // Only for stats version 1.
 	TopN           *TopN
-	FMSketch       *FMSketch
+	FMSketch       *FMSketch // Disabled by default.
 	Info           *model.ColumnInfo
 	Histogram
 
