@@ -265,4 +265,267 @@ In this scenario, equality comparisons can lead to unexpected results, breaking 
 
 In most cases, it is advisable to derive the `PartialEq` trait for a struct or enum. If you choose to implement the trait manually, be careful to maintain the transitivity property to avoid logical inconsistencies.
 
+## Eq
+
+The `Eq` trait extends the `PartialEq` trait by enforcing reflexivity. It is defined as follows:
+
+```rust
+pub trait Eq: PartialEq { }
+```
+The `Eq` trait does not introduce any new methods beyond those in `PartialEq`. Instead, it acts as a marker to signify that a type adheres to the reflexivity property of equality. This means that any type implementing `Eq` must ensure that every instance of the type is equal to itself.
+
+It's important to note that the Rust compiler cannot automatically verify the reflexivity property. Therefore, it is the programmer's responsibility to ensure that the `Eq` trait is implemented correctly and that the reflexivity property is upheld.
+
+Similar to the `PartialEq` trait, you can derive the `Eq` trait for a custom type:
+
+```rust
+#[derive(Eq, PartialEq)]
+struct Point {
+    x: i32,
+    y: i32,
+}
+```
+
+Note that you must also derive the `PartialEq` trait because `Eq` depends on it.
+
+## PartialOrd
+
+The `PartialOrd` trait is used to compare values and determine their ordering. It is defined as follows:
+
+```rust
+pub trait PartialOrd<Rhs = Self>: PartialEq<Rhs>
+where
+    Rhs: ?Sized,
+{
+    // Required method
+    fn partial_cmp(&self, other: &Rhs) -> Option<Ordering>;
+
+    // Provided methods
+    fn lt(&self, other: &Rhs) -> bool { ... }
+    fn le(&self, other: &Rhs) -> bool { ... }
+    fn gt(&self, other: &Rhs) -> bool { ... }
+    fn ge(&self, other: &Rhs) -> bool { ... }
+}
+```
+The `lt`, `le`, `gt`, and `ge` methods of this trait allow comparisons using the `<`, `<=`, `>`, and `>=` operators, respectively.
+
+The `partial_cmp` method returns an `Option<Ordering>` enum, which can be `Some(Ordering::Less)`, `Some(Ordering::Equal)`, `Some(Ordering::Greater)`, or `None`.
+
+You might wonder why the `PartialOrd` trait returns an `Option<Ordering>` instead of an `Ordering` directly. The reason is similar to the `PartialEq` trait: it accounts for cases where values cannot be compared, such as `NaN` in floating-point numbers. Thus, `partial_cmp` returns `None` when a comparison is not possible.
+
+```rust
+fn main() {
+    let x = f32::NAN;
+    let y = 5.0;
+
+    assert_eq!(x.partial_cmp(&y), None);
+    assert_eq!(y.partial_cmp(&x), None);
+}
+```
+
+To implement the `PartialOrd` trait, you can either do it manually or derive it using the `derive` macro.
+
+For example, you can derive the `PartialOrd` trait for a struct like this:
+
+```rust
+#[derive(PartialEq, PartialOrd)]
+struct Point {
+    x: i32,
+    y: i32,
+}
+```
+
+Expanding the `derive` marco generates the following implementation:
+
+```rust
+#![feature(prelude_import)]
+#[prelude_import]
+use std::prelude::rust_2021::*;
+#[macro_use]
+extern crate std;
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+... // Implementation of PartialEq
+
+#[automatically_derived]
+impl ::core::cmp::PartialOrd for Point {
+    #[inline]
+    fn partial_cmp(&self, other: &Point)
+        -> ::core::option::Option<::core::cmp::Ordering> {
+        match ::core::cmp::PartialOrd::partial_cmp(&self.x, &other.x) {
+            ::core::option::Option::Some(::core::cmp::Ordering::Equal) =>
+                ::core::cmp::PartialOrd::partial_cmp(&self.y, &other.y),
+            cmp => cmp,
+        }
+    }
+}
+```
+
+It follow a [lexicographical] order, first comparing the `x` fields and then the `y` fields top to bottom.
+
+For enums, variants are ordered by their discriminant values:
+
+```rust
+#[derive(PartialEq, PartialOrd)]
+enum Direction {
+    Up,
+    Down,
+    Left,
+    Right,
+}
+
+assert!(Direction::Up < Direction::Down);
+```
+
+The `derive` macro generates the following implementation:
+
+```rust
+#![feature(prelude_import)]
+#[prelude_import]
+use std::prelude::rust_2021::*;
+#[macro_use]
+extern crate std;
+enum Direction { Up, Down, Left, Right, }
+
+... // Implementation of PartialEq
+
+#[automatically_derived]
+impl ::core::cmp::PartialOrd for Direction {
+    #[inline]
+    fn partial_cmp(&self, other: &Direction)
+        -> ::core::option::Option<::core::cmp::Ordering> {
+        let __self_discr = ::core::intrinsics::discriminant_value(self);
+        let __arg1_discr = ::core::intrinsics::discriminant_value(other);
+        ::core::cmp::PartialOrd::partial_cmp(&__self_discr, &__arg1_discr)
+    }
+}
+```
+You can manually set the discriminant values for the variants to change the ordering:
+
+```rust
+#[derive(PartialEq, PartialOrd)]
+enum Direction {
+    Up = 4,
+    Down = 3,
+    Left = 2,
+    Right = 1,
+}
+
+assert!(Direction::Up > Direction::Down);
+```
+
+It is also possible to implement the `PartialOrd` trait manually:
+
+```rust
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+impl PartialEq for Point {
+    fn eq(&self, other: &Self) -> bool {
+        self.x == other.x && self.y == other.y
+    }
+}
+
+impl PartialOrd for Point {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        match self.x.partial_cmp(&other.x) {
+            Some(Ordering::Equal) => self.y.partial_cmp(&other.y),
+            other => other,
+        }
+    }
+}
+
+assert!(Point { x: 1, y: 2 } < Point { x: 2, y: 1 });
+```
+
+But be careful when implementing the `PartialOrd` trait manually. If you derive the `PartialEq` trait for a type, you should also derive the `PartialOrd` trait to ensure consistency between equality and ordering comparisons.
+
+```rust
+#[derive(PartialEq)]
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+impl PartialOrd for Point {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.x.cmp(&other.x))
+    }
+}
+
+let p1 = Point { x: 1, y: 2 };
+let p2 = Point { x: 1, y: 1 };
+
+// `PartialEq` and `PartialOrd` are inconsistent
+assert!(p1.partial_cmp(&p2) == Some(Ordering::Equal));
+assert!(p1 == p2); // This assertion will fail
+```
+
+When you choose to implement the `PartialOrd` trait manually, it is advisable to implement all related traits (`PartialEq`, `Eq`, `PartialOrd`, and `Ord`) consistently and manually to ensure logical coherence.
+
+## Ord
+
+The `Ord` trait builds upon the `PartialOrd` and `Eq` traits, ensuring that a type adheres to a [total ordering]. It is defined as follows:
+
+```rust
+pub trait Ord: Eq + PartialOrd {
+    // Required method
+    fn cmp(&self, other: &Self) -> Ordering;
+
+    // Provided methods
+    fn max(self, other: Self) -> Self
+       where Self: Sized { ... }
+    fn min(self, other: Self) -> Self
+       where Self: Sized { ... }
+    fn clamp(self, min: Self, max: Self) -> Self
+       where Self: Sized { ... }
+}
+```
+
+The `Ord` trait enforces reflexivity through the `Eq` trait and provides the `cmp` method for comparing two values, returning an `Ordering` enum. This ensures that every pair of values can be compared, establishing a total order.
+
+The implementation of the `Ord` trait must be consistent with the `PartialOrd` trait. `Ord` requires that the type also be `PartialOrd`, `PartialEq`, and `Eq`.
+
+You can choose to derive it, or implement it manually. If you derive it, you should derive all four traits. If you implement it manually, you should manually implement all four traits, based on the implementation of `Ord`.
+
+```rust
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+impl Ord for Point {
+    fn cmp(&self, other: &Self) -> Ordering {
+        match self.x.cmp(&other.x) {
+            Ordering::Equal => self.y.cmp(&other.y),
+            other => other,
+        }
+    }
+}
+
+impl PartialOrd for Point {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl PartialEq for Point {
+    fn eq(&self, other: &Self) -> bool {
+        self.x == other.x && self.y == other.y
+    }
+}
+
+impl Eq for Point {}
+```
+
+When implementing `PartialOrd`, you can directly call the `cmp` method within the `partial_cmp` implementation. This approach ensures consistency between the `PartialOrd` and `Ord` implementations.
+
+
 [IEEE 754]: https://en.wikipedia.org/wiki/IEEE_754
+[lexicographical]: https://en.wikipedia.org/wiki/Lexicographic_order
+[total ordering]: https://en.wikipedia.org/wiki/Total_order
