@@ -164,5 +164,105 @@ impl PartialEq for Point {
 }
 ```
 
+As mentioned earlier, the term "partial" in `PartialEq` does not imply that only part of a struct is compared. Moreover, implementing the `PartialEq` trait for only some fields of a type is not recommended. Let's consider the following example.
+
+From the definition of the `PartialEq` trait, we can see that it takes a type parameter `Rhs`, which defaults to `Self`. This means you can use the `PartialEq` trait to compare two different types.
+
+```rust
+// Define clothing types, deriving PartialEq to allow comparisons
+#[derive(PartialEq)]
+enum ClothingType {
+    Shirt,
+    Pants,
+    Jacket,
+}
+
+// Define a Clothing struct with an ID and a clothing type
+struct Clothing {
+    id: i32,
+    clothing_type: ClothingType,
+}
+
+// Allow comparisons between Clothing and ClothingType
+impl PartialEq<ClothingType> for Clothing {
+    fn eq(&self, other: &ClothingType) -> bool {
+        self.clothing_type == *other
+    }
+}
+
+// Allow comparisons between ClothingType and Clothing
+impl PartialEq<Clothing> for ClothingType {
+    fn eq(&self, other: &Clothing) -> bool {
+        *self == other.clothing_type
+    }
+}
+
+fn main() {
+    let my_clothing = Clothing {
+        id: 101,
+        clothing_type: ClothingType::Shirt,
+    };
+
+    // Check if the clothing item is a shirt
+    assert!(my_clothing == ClothingType::Shirt);
+    // Check if the clothing item is not a jacket
+    assert!(ClothingType::Jacket != my_clothing);
+}
+```
+
+In this example, we define a `Clothing` struct that includes an ID and a `ClothingType` field. We then implement the `PartialEq` trait for both `Clothing` and `ClothingType`, enabling comparisons between these two types.
+However, the above example can be problematic as it may violate the transitivity property of equality. For instance, consider the following code:
+
+```rust
+// Define clothing types, deriving PartialEq to allow comparisons
+#[derive(PartialEq)]
+enum ClothingType {
+    Shirt,
+    Pants,
+    Jacket,
+}
+
+// Define a Clothing struct with an ID and a clothing type, deriving PartialEq
+#[derive(PartialEq)]
+struct Clothing {
+    id: i32,
+    clothing_type: ClothingType,
+}
+
+// Allow comparisons between Clothing and ClothingType
+impl PartialEq<ClothingType> for Clothing {
+    fn eq(&self, other: &ClothingType) -> bool {
+        self.clothing_type == *other
+    }
+}
+
+// Allow comparisons between ClothingType and Clothing
+impl PartialEq<Clothing> for ClothingType {
+    fn eq(&self, other: &Clothing) -> bool {
+        *self == other.clothing_type
+    }
+}
+
+fn main() {
+    let c1 = Clothing {
+        id: 101,
+        clothing_type: ClothingType::Shirt,
+    };
+    let c2 = Clothing {
+        id: 102,
+        clothing_type: ClothingType::Shirt,
+    };
+
+    assert!(c1 == ClothingType::Shirt);
+    assert!(ClothingType::Shirt == c2);
+
+    // Check if the clothing items are equal
+    assert!(c1 == c2); // This assertion will fail
+}
+```
+
+In this scenario, equality comparisons can lead to unexpected results, breaking the transitivity rule. Transitivity requires that if `a == b` and `b == c`, then `a == c` must also hold true. Violating this property can cause logical inconsistencies and bugs in your code.
+
+In most cases, it is advisable to derive the `PartialEq` trait for a struct or enum. If you choose to implement the trait manually, be careful to maintain the transitivity property to avoid logical inconsistencies.
 
 [IEEE 754]: https://en.wikipedia.org/wiki/IEEE_754
