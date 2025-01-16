@@ -176,7 +176,7 @@ Database changed
 原来的题目描述中其实并没有要求输出到日志中，所以我想要不直接输出到 `warnings` 中。为了找到与事务开始的相关的代码，我先去 ast 包中搜索 begin 关键字找到了 begin 语句的定义。
 然后通过 `GoLand` 搜索引用，找到了相关的引用：
 
-![](../static/files/post-images/2020-09-03/usages.png)
+![](images/post-images/2020-09-03/usages.png)
 
 通过引用找到了执行 begin 语句的函数，它被定义在 `simple.go` 中。尝试直接添加输出到 warnings：
 
@@ -268,17 +268,3 @@ func (e *SimpleExec) executeBegin(ctx context.Context, s *ast.BeginStmt) error {
 [三篇文章了解 TiDB 技术内幕 - 谈调度](https://pingcap.com/blog-cn/tidb-internal-3/)
 
 [TiDB In Action: based on 4.0](https://book.tidb.io/)
-
-### 文章链接
-
-文章首发于： [Rustin 的博客](https://rustin.me/)
-
-同步更新：
-
-[知乎]()
-
-[简书]()
-
-[掘金]()
-
-[segmentfault]()

@@ -52,7 +52,7 @@ antd 就有这样被[标记的问题](https://github.com/ant-design/ant-design/i
 
 在 antd 的 issue 中，有一类问题被 `help wanted` 的标签标记，这些问题大多都是一些用户提的需求或者简单的 Bug，我们可以从这些问题入手，比如我上周六在 issue 列表中，发现了[这个 help wanted 的问题](https://github.com/ant-design/ant-design/issues/22636)。
 
-![](../static/files/post-images/2020-04-02/issue.png){:height="550px" width="750px"}
+![](images/post-images/2020-04-02/issue.png){:height="550px" width="750px"}
 
 
 我看到这个问题的时候，报告人已经做了一些研究，似乎是 referer HTTP 头信息造成的。一般在开源社区中，如果你想修复这个问题，你就可以在下方留言自己已经在尝试修复这个问题或者 @ 社区协作者
@@ -73,7 +73,7 @@ antd 就有这样被[标记的问题](https://github.com/ant-design/ant-design/i
 它也有[中文版](https://github.com/ant-design/ant-design/blob/master/.github/PULL_REQUEST_TEMPLATE/pr_cn.md)，所以我就不再描述里面的内容，因为我觉得还是比较清晰的。
 我的 PR 是修复 Bug，所以根据我们从贡献指南中获取到的信息来说，我们应该创建一个 PR 到 master 分支并填好 PR 的[相关信息](https://github.com/ant-design/ant-design/pull/22688)：
 
-![](../static/files/post-images/2020-04-02/pr.png){:height="550px" width="800px"}
+![](images/post-images/2020-04-02/pr.png){:height="550px" width="800px"}
 
 到这里，似乎大功告成，坐等 PR 被合并了(我在 PR 的信息中使用了 Github 关联 PR 和 issue 的功能 "Fixes #22636"，[查看用法](https://help.github.com/cn/github/managing-your-work-on-github/linking-a-pull-request-to-an-issue))。
 
@@ -81,14 +81,14 @@ antd 就有这样被[标记的问题](https://github.com/ant-design/ant-design/i
 
 但是实际上没有那么顺利，一般我们在提交 PR 之后，大概率会收到社区协作者的 code review，在 antd 中，会有🤖来帮你分配 reviewer。我的 PR 被 afc163 大神 review 了，收到了如下的评论：
 
-![](../static/files/post-images/2020-04-02/comment1.png){:height="450px" width="750px"}
+![](images/post-images/2020-04-02/comment1.png){:height="450px" width="750px"}
 
 在和 afc163 交流之后，我们确定需要只对 codesandbox 做特殊的处理，所以我就开始了一次新的尝试。
 
 首先，从思路上来说，目前想要做这种特殊的处理，我们只能对使用特殊的标签来处理这种情况，具体支持单独设置 referer 的标签可以查阅这个[文档](https://developer.mozilla.org/zh-CN/docs/Web/HTTP/Headers/Referrer-Policy)。
 同时我还去查阅了 codesandbox 的官方文档，我发现他们提供的[定义接口](https://codesandbox.io/docs/importing#define-api)其实不光支持 post 请求，同时还支持 get 请求:
 
-![](../static/files/post-images/2020-04-02/get.png){:height="450px" width="750px"}
+![](images/post-images/2020-04-02/get.png){:height="450px" width="750px"}
 
 那我立刻有了思路，我可以直接使用 `<a>` 标签来发送 get 请求解决这个问题，我立刻修改代码发送了 get 请求并且设置了 referer 规则：
 ```jsx
@@ -140,17 +140,3 @@ antd 就有这样被[标记的问题](https://github.com/ant-design/ant-design/i
 [rust contributing guide](https://github.com/rust-lang/rust/blob/master/CONTRIBUTING.md)
 
 [github docs](https://help.github.com/)
-
-### 文章链接
-
-文章首发于： [Rustin 的博客](https://rustin.me/)
-
-同步更新：
-
-[知乎](https://zhuanlan.zhihu.com/p/123367842)
-
-[简书](https://www.jianshu.com/p/77471d5d4afb)
-
-[掘金](https://juejin.im/post/5e872cf3f265da480836a8e7)
-
-[segmentfault](https://segmentfault.com/a/1190000022259063)

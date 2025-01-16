@@ -211,7 +211,7 @@ select *
 from topic_test;
 ```
 
-![](../static/files/post-images/2022-01-30/res.jpg){:height="100px" width="750px"}
+![](images/post-images/2022-01-30/res.jpg){:height="100px" width="750px"}
 
 可以看到我们前面插入的数据已经正确的被解析和查询到了。现在当你在上游插入或者删除数据时，它也会实时更新数据。
 

@@ -11,7 +11,7 @@ tags:
 最近在学习 Rust，并且在尝试使用 Rust 来做内核，跟着 [Writing an OS in Rust](https://os.phil-opp.com/){:target="_blank"} 系列博客学习，这个博客质量非常高，深入浅出。
 
 但是最近遇到一个qemu的问题,当我将系统升级到最近的 macOS 10.15 Catalina 之后，qemu 无法运行，启动之后卡死。如下：
-![](../static/files/post-images/2019-11-03/qemu-crash.jpeg){:height="360px" width="450px"}
+![](images/post-images/2019-11-03/qemu-crash.jpeg){:height="360px" width="450px"}
 
 
 ### 解决方案
@@ -106,7 +106,7 @@ end
 
 重新编译安装之后，就不会出现死锁能正常工作了。
 
-![](../static/files/post-images/2019-11-03/qemu-not-crash.png){:height="360px" width="450px"}
+![](images/post-images/2019-11-03/qemu-not-crash.png){:height="360px" width="450px"}
 
 ---
 

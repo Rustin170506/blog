@@ -407,17 +407,3 @@ check: fmt errcheck unconvert lint tidy check-static vet staticcheck goword
 
 ### 参考链接
 [tidb](https://github.com/pingcap/tidb)
-
-### 文章链接
-
-文章首发于： [Rustin 的博客](https://rustin.me/)
-
-同步更新：
-
-[知乎]()
-
-[简书]()
-
-[掘金]()
-
-[segmentfault]()
