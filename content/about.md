@@ -16,9 +16,9 @@ I am also a big believer in open source. I contribute to the Rust community, whe
   - [console] - A debugger for async rust!
   - [tokio-console-web] - A web-based debugger for async rust!
 
-Programming languages I primarily code in: Rust/Go/TypeScript/JavaScript
+Programming languages I primarily code in: Rust/Go/TypeScript/JavaScript.
 
-Languages I speak: English/Chinese
+Languages I speak: English/Chinese.
 
 [PingCAP]: https://www.pingcap.com/
 [TiDB]: https://github.com/pingcap/tidb
@@ -28,4 +28,5 @@ Languages I speak: English/Chinese
 [console]: https://github.com/tokio-rs/console
 [tokio-console-web]: https://github.com/Rustin170506/tokio-console-web
 [crates.io]: https://github.com/rust-lang/crates.io
+[submit a new issue]: https://github.com/Rustin170506/Rustin170506/issues/new
 
