@@ -18,7 +18,10 @@ I am also a big believer in open source. I contribute to the Rust community, whe
 
 Programming languages I primarily code in: Rust/Go/TypeScript/JavaScript.
 
-Languages I speak: English/Chinese.
+Languages I speak:
+
+- English (Professional working proficiency)
+- Chinese (Native proficiency)
 
 [PingCAP]: https://www.pingcap.com/
 [TiDB]: https://github.com/pingcap/tidb
