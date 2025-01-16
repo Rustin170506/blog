@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TiCDC Sink 开发指南 - Rustin</title>
+  <link rel="stylesheet" href="https://netdna.bootstrapcdn.com/bootstrap/3.1.1/css/bootstrap.min.css" type="text/css">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Merriweather+Sans:400,300,700" type="text/css">
+  <link rel="stylesheet" href="/static/app.css" type="text/css">
+  <link rel="stylesheet" href="/static/syntax.css" type="text/css">
+  <link type="application/atom+xml" rel="alternate" href="http://localhost:4000/feed.xml" />
+  <meta name="theme-color" content="#111111">
+
+  <meta name="og:type" content="article">
+  <meta name="og:title" content="TiCDC Sink 开发指南 – Rustin">
+  <meta name="og:description" content="">
+  <meta name="og:site_name" content="Rustin">
+  <meta name="og:url" content="http://localhost:4000/TiCDC-Sink-%E5%BC%80%E5%8F%91%E6%8C%87%E5%8D%97/">
+  
+  <meta name="og:image" content="http://localhost:4000/static/default_image.jpg">
+  
+  <meta property="article:published_time" content=" 2023-02-07">
+
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:site" content="@hi_rustin">
+  <meta name="twitter:domain" content="rustin.me">
+  <meta name="twitter:title" content="TiCDC Sink 开发指南 – Rustin">
+  <meta name="twitter:description" content="">
+  
+  <meta name="twitter:image" content="http://localhost:4000/static/default_image.jpg">
+  
+  <meta name="twitter:url" content="http://localhost:4000/TiCDC-Sink-%E5%BC%80%E5%8F%91%E6%8C%87%E5%8D%97/">
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/anchor-js/3.2.0/anchor.min.js"></script>
+</head>
+
+<body>
+  <header>
+    <h1><a href="/">Rustin</a></h1>
+    <span>I’m a passionate software engineer who specializes in distributed systems and dev tools.</span>
+  </header>
+
+  <div class="content post">
+    <h2>TiCDC Sink 开发指南</h2>
+    <p class="date">07 February 2023</p>
+
+    <p>我近半年的时间都在做 <a href="https://github.com/pingcap/tiflow/tree/master/cdc/sinkv2">TiCDC</a>的改造工作，目前新的 Sink 实现已经成功替换了旧的实现。最近有客户希望通过自己实现 Sink 的方式来接入 TiCDC，所以我想把这段时间的改造和设计经验分享出来，希望能帮助到大家。</p>
+
+<p>此博客在 <a href="https://github.com/Rustin170506/rustin.me">GitHub</a> 上公开发布。 如果您有任何问题，请在此处打开一个 <a href="https://github.com/Rustin170506/rustin.me/issues">issue</a>。</p>
+
+<blockquote>
+  <p>⚠️ 注意：</p>
+  <ol>
+    <li>该指南主要面向开发者，如果您只是想使用 TiCDC，请参阅 <a href="https://docs.pingcap.com/zh/tidb/stable/ticdc-overview">TiCDC 使用文档</a>。</li>
+    <li>在阅读该指南前，请先阅读 <a href="https://rustin.me/TiCDC-%E6%9E%B6%E6%9E%84%E5%92%8C%E6%95%B0%E6%8D%AE%E5%90%8C%E6%AD%A5%E9%93%BE%E8%B7%AF%E8%A7%A3%E6%9E%90/">TiCDC 架构和数据同步链路解析</a>了解 TiCDC 的基本架构和数据同步流程。</li>
+  </ol>
+</blockquote>
+
+<h2 id="基本概念">基本概念</h2>
+
+<blockquote>
+  <p>可以先简单浏览这些子组件概念，后面会有详细的介绍。</p>
+</blockquote>
+
+<ul>
+  <li>Sink：TiCDC 的 Sink 模块负责将 TiCDC 的数据变更输出到外部系统中。目前 TiCDC 支持输出到 MySQL、TiDB、Kafka、S3 等外部系统中。</li>
+  <li><a href="https://github.com/pingcap/tiflow/tree/master/cdc/sinkv2/tablesink">Table Sink</a>：负责将 TiCDC 的数据变更按照表为单位进行聚合，然后输出到外部系统中。</li>
+  <li><a href="https://github.com/pingcap/tiflow/tree/master/cdc/sinkv2/eventsink">Event Sink</a>：负责与外部系统进行交互，将 TiCDC 的数据变更编码后输出到外部系统中。这里的 Event 主要指的是 TiCDC 的数据变更事件，比如 Insert、Update、Delete 等。</li>
+  <li><a href="https://github.com/pingcap/tiflow/tree/master/cdc/sinkv2/eventsink/mq">MQ Event Sink</a>：负责将 TiCDC 的数据变更输出到 Message Queue 中。MQ Sink 会将数据变更事件编码为 MQ 消息，然后输出到 MQ 中。目前 TiCDC 支持输出到 Kafka 中。</li>
+  <li><a href="https://github.com/pingcap/tiflow/tree/master/cdc/sinkv2/eventsink/txn">Txn Event Sink</a>：负责将 TiCDC 的数据变更按照事务为单位进行聚合，然后输出到外部系统中。目前 TiCDC 支持输出到 MySQL、TiDB 中。</li>
+  <li><a href="https://github.com/pingcap/tiflow/tree/master/cdc/sinkv2/ddlsink">DDL Sink</a>：负责将 TiCDC 的 DDL 语句输出到外部系统中。目前 TiCDC 支持输出到 Kafka、MySQL、TiDB 中。</li>
+  <li><a href="https://github.com/pingcap/tiflow/tree/master/cdc/sinkv2/ddlsink/mq">MQ DDL Sink</a>：负责将 TiCDC 接受到的 DDL 语句输出到 Kafka 中。</li>
+  <li><a href="https://github.com/pingcap/tiflow/tree/master/cdc/sinkv2/ddlsink/mysql">Txn DDL Sink</a>：，负责将 TiCDC 接受到的 DDL 语句输出到 MySQL、TiDB 中。</li>
+</ul>
+
+<h2 id="基本架构">基本架构</h2>
+
+<p>我们可以将 TiCDC 接收到的数据分为两类：</p>
+<ul>
+  <li>DML：TiCDC 接收到的数据变更事件，比如 Insert、Update、Delete 等。</li>
+  <li>DDL：TiCDC 接收到的 DDL 语句。</li>
+</ul>
+
+<p>Sink 模块也根据上述不同的数据类型抽象出了不同的 Sink 子模块，分别是 <a href="https://github.com/pingcap/tiflow/tree/master/cdc/sinkv2/eventsink">Event Sink</a>、<a href="https://github.com/pingcap/tiflow/tree/master/cdc/sinkv2/ddlsink">DDL Sink</a>。Event Sink 负责将过滤和聚合后的 DML 数据输出到外部系统中，DDL Sink 负责将过滤后的 DDL 数据输出到外部系统中。</p>
+
+<p>DDL Sink 很容易理解，因为它就是简单的将收到每张表的 DDL 语句编码后输出到外部系统。而 Event Sink 则更加复杂，我们会接收到大量不同表的变更数据，但是 TiCDC 需要按照表为单位进行数据同步。所以我们又引入了 <a href="https://github.com/pingcap/tiflow/tree/master/cdc/sinkv2/tablesink">Table Sink</a>，它负责将收到的数据按照表进行聚合，然后输出到 Event Sink 中。</p>
+
+<p>我们可以将 TiCDC 的 Sink 模块抽象为下面这个图：</p>
+
+<p><a href="https://www.plantuml.com/plantuml/uml/ROwn3e8m48RtFiN9Q08FG1mOO1CJ0eFhYPVOs5P2MoSVtjCsX0Qsotr_ll-lhCFPUQt4mJr84qmAfH6ZGcjXw04jP0FU544lpJEBe0cWUPDn2MYxGDeEjd2uNg9mHcDnTF9bafZWmcEU__GbU4j2y7Nw5CNVMuBKaoBD-UNFoXJ4ghe-Xoe-edm1guqxT6_aAYVu3DrHbRGdSBEj8dFtMdq1"><img src="https://www.plantuml.com/plantuml/png/ROwn3e8m48RtFiN9Q08FG1mOO1CJ0eFhYPVOs5P2MoSVtjCsX0Qsotr_ll-lhCFPUQt4mJr84qmAfH6ZGcjXw04jP0FU544lpJEBe0cWUPDn2MYxGDeEjd2uNg9mHcDnTF9bafZWmcEU__GbU4j2y7Nw5CNVMuBKaoBD-UNFoXJ4ghe-Xoe-edm1guqxT6_aAYVu3DrHbRGdSBEj8dFtMdq1" alt="" /></a></p>
+
+<p>有了这个基本的架构，我们就可以看看数据是如何在各个子模块之间流动的了。</p>
+
+<h2 id="数据流程">数据流程</h2>
+
+<p>数据同步流程也可以根据数据类型分为两部分，一部分是 DML 数据，另一部分是 DDL 数据。</p>
+
+<h3 id="dml-数据">DML 数据</h3>
+<p>TiCDC 从 TiKV 接受到变更数据后，会对数据进行排序，但是整个排序过程中数据都是所有表的数据放在一起进行排序的。排序完成后我们还需要以表为单位将数据进行分发，这个过程就是 Table Sink 负责的。所以其他组件跟 Sink 模块的交互都是通过调用 Table Sink 的接口来完成的。</p>
+
+<p>这个过程中 Table Sink 可以理解成一个缓冲区，它会将收到的数据按照表进行缓存，但是并不会真实的将数据写入外部系统。与外部系统的交互是通过 Event Sink 来完成的，通过这样的抽象，多个 Table Sink 可以共享一个 Event Sink，我们可以在底层并发的进行数据写入。另外，我们也能共用一些公共的资源，比如数据库连接池，Kafka 的生产者等等。</p>
+
+<p>下面是 DML 数据在 <a href="https://github.com/pingcap/tiflow/tree/master/cdc/sinkv2/eventsink/mq">MQ Event Sink</a> 模块中流转的时序图：</p>
+
+<p><a href="https://www.plantuml.com/plantuml/uml/VT2n2eCm40RWFKznTNSmeqEn5QSWL1Gwd_5AGsAK6FlyZQ6Kwj0bm_z_kOCh5e_EhwDX9_-aaM0sg2oRGwYacj5wwDeCS86amzuGjChgB3a0VW1y3-gcQgEe6wXUP7r4UoCY4FZG25StQN89Ozlgz1p_vo3H6BWxvIdEM4BB_xHRlDKYXvkRXbKI4v1-_QKKaSGexFbCACFJezI_7Jzs1TaXdEmD"><img src="https://www.plantuml.com/plantuml/png/VT2n2eCm40RWFKznTNSmeqEn5QSWL1Gwd_5AGsAK6FlyZQ6Kwj0bm_z_kOCh5e_EhwDX9_-aaM0sg2oRGwYacj5wwDeCS86amzuGjChgB3a0VW1y3-gcQgEe6wXUP7r4UoCY4FZG25StQN89Ozlgz1p_vo3H6BWxvIdEM4BB_xHRlDKYXvkRXbKI4v1-_QKKaSGexFbCACFJezJPRyaF9MS5sI4SxGq0" alt="" /></a></p>
+
+<p>在上图中 Table Sink1 和 Table Sink2 通过调用 Event Sink 的 <code class="language-plaintext highlighter-rouge">WriteEvents</code> 将数据异步的写入到 Kafka 中，在等到写入的消息收到 ACK 之后，再通过调用每个事件的 Callback 来通知 Table Sink 数据已经写入成功。<strong>整个数据写入过程都是异步的，这样可以提高数据写入的吞吐量。</strong></p>
+
+<h3 id="ddl-数据">DDL 数据</h3>
+
+<p>TiCDC 从 TiKV 接受到 DDL 变更数据后，会将数据直接发送到具体的 <a href="https://github.com/pingcap/tiflow/tree/master/cdc/sinkv2/ddlsink">DDL Sink</a> 实现中，这个过程是同步的，也就是说 TiCDC 会等待 DDL Sink 返回成功之后才会继续处理后续的 DDL 变更数据。在写入 DDL 的时候我们并没有使用 Table Sink，因为 DDL 数据是全局共用且有序的，所以我们可以直接将数据发送到 DDL Sink 中。</p>
+
+<p>下面是 DDL 数据在 MQ DDL Sink 模块中流转的时序图：</p>
+
+<p><a href="https://www.plantuml.com/plantuml/uml/LSungiCm40JGVayntxqluE9ZWZl54ECJBD862yah8Sj5Slg894swPUSDp7XKBlNS8_tLJNP1ZkoLSdjwwpDhnRnCqtK57-Zc1Ut6wZLqFyQyOyFtmBYK5AHqHDzY_mypm7ACM1zgjvBKFyNXLf8xhP11tyW73qY1Hb7N5hq0"><img src="https://www.plantuml.com/plantuml/png/LSungiCm40JGVayntxqluE9ZWZl54ECJBD862yah8Sj5Slg894swPUSDp7XKBlNS8_tLJNP1ZkoLSdjwwpDhnRnCqtK57-Zc1Ut6wZLqFyQyOyFtmBYK5AHqHDzY_mypm7ACM1zgjvBKFyNXLf8xhP11tyW73qY1Hb7N5hq0" alt="" /></a></p>
+
+<h2 id="table-sink">Table Sink</h2>
+
+<p>在 Sink 模块中，Table Sink 是一个抽象的接口：</p>
+
+<div class="language-golang highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c">// https://github.com/pingcap/tiflow/blob/master/cdc/sinkv2/tablesink/table_sink.go</span>
+<span class="c">// 用于将数据以表为单位进行缓存。</span>
+<span class="k">type</span> <span class="n">TableSink</span> <span class="k">interface</span> <span class="p">{</span>
+	<span class="c">// AppendRowChangedEvents 将行变更事件追加到 Table Sink 中。</span>
+	<span class="c">// 注意：此方法不是线程安全的，请不要并发调用。</span>
+	<span class="n">AppendRowChangedEvents</span><span class="p">(</span><span class="n">rows</span> <span class="o">...*</span><span class="n">model</span><span class="o">.</span><span class="n">RowChangedEvent</span><span class="p">)</span>
+	<span class="c">// UpdateResolvedTs 将聚合完成的数据发送到 Event Sink 中。</span>
+	<span class="c">// 注意：此方法是异步的且不是线程安全的。</span>
+	<span class="n">UpdateResolvedTs</span><span class="p">(</span><span class="n">resolvedTs</span> <span class="n">model</span><span class="o">.</span><span class="n">ResolvedTs</span><span class="p">)</span> <span class="kt">error</span>
+	<span class="c">// GetCheckpointTs 返回 Table Sink 中的 CheckpointTs。</span>
+	<span class="c">// 注意：此方法是线程安全的。</span>
+	<span class="n">GetCheckpointTs</span><span class="p">()</span> <span class="n">model</span><span class="o">.</span><span class="n">ResolvedTs</span>
+	<span class="c">// Close 关闭 Table Sink 并释放资源。</span>
+	<span class="c">// 注意：我们需要保证这个方法是可取消或者可中断的。</span>
+	<span class="n">Close</span><span class="p">(</span><span class="n">ctx</span> <span class="n">context</span><span class="o">.</span><span class="n">Context</span><span class="p">)</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>它最重要的两个方法是 <code class="language-plaintext highlighter-rouge">AppendRowChangedEvents</code> 和 <code class="language-plaintext highlighter-rouge">UpdateResolvedTs</code>，前者用于将行变更事件追加到 Table Sink 的缓存中，后者用于将聚合完的数据发送到 Event Sink 中。在 TiCDC 中，我们实现了一个基于内存的 Table Sink，它会将行变更事件聚合到内存中。</p>
+
+<p>因为针对的外部系统的不同，我们需要实现不同的聚合策略。所以我们为 Table Sink 的实现添加了一个范型参数 <code class="language-plaintext highlighter-rouge">E</code>，用于指定聚合策略：</p>
+
+<div class="language-golang highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c">// https://github.com/pingcap/tiflow/blob/master/cdc/sinkv2/tablesink/table_sink.go</span>
+<span class="k">type</span> <span class="n">EventTableSink</span><span class="p">[</span><span class="n">E</span> <span class="n">eventsink</span><span class="o">.</span><span class="n">TableEvent</span><span class="p">]</span> <span class="k">struct</span> <span class="p">{</span>
+	<span class="o">...</span>
+	<span class="c">// 就是具体的 Event Sink，比如 MQ Event Sink。</span>
+	<span class="n">backendSink</span>     <span class="n">eventsink</span><span class="o">.</span><span class="n">EventSink</span><span class="p">[</span><span class="n">E</span><span class="p">]</span>
+	<span class="o">...</span>
+	<span class="c">// 用于实现不同的聚合策略。</span>
+	<span class="n">eventAppender</span>   <span class="n">eventsink</span><span class="o">.</span><span class="n">Appender</span><span class="p">[</span><span class="n">E</span><span class="p">]</span>
+	<span class="c">// 注意：数据是按照 CommitTs 排序的。</span>
+	<span class="n">eventBuffer</span> <span class="p">[]</span><span class="n">E</span>
+	<span class="o">...</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>可以看到范型参数 <code class="language-plaintext highlighter-rouge">E</code> 的类型为 <code class="language-plaintext highlighter-rouge">eventsink.TableEvent</code>，它是一个非常简单的接口：</p>
+
+<div class="language-golang highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c">// https://github.com/pingcap/tiflow/blob/master/cdc/sinkv2/eventsink/event.go</span>
+<span class="k">type</span> <span class="n">TableEvent</span> <span class="k">interface</span> <span class="p">{</span>
+	<span class="c">// GetCommitTs 返回事件的 CommitTs。</span>
+	<span class="n">GetCommitTs</span><span class="p">()</span> <span class="kt">uint64</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>通过这个接口抽象，任何可以获取 CommitTs 的事件都可以作为 Table Sink 的缓存对象。在 TiCDC 中，我们实现了两种聚合策略：</p>
+
+<ul>
+  <li><code class="language-plaintext highlighter-rouge">RowChangedEvent</code>：用于单行变更，比如 <a href="https://github.com/pingcap/tiflow/tree/master/cdc/sinkv2/eventsink/mq">MQ Event Sink</a> 就是将行变更一条一条发送到 Kafka 中。</li>
+  <li><code class="language-plaintext highlighter-rouge">SingleTableTxn</code>：用于单表事务，比如 <a href="https://github.com/pingcap/tiflow/tree/master/cdc/sinkv2/eventsink/txn">Txn Event Sink</a> 就是以事务为单位提交到 MySQL 中。</li>
+</ul>
+
+<p>还记得我们在数据流程中提到 DML 数据的写入是异步的吗？所以我们需要为每个 Event 添加一个 Callback，用于在数据写入完成后通知 Table Sink：</p>
+
+<div class="language-golang highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c">// https://github.com/pingcap/tiflow/blob/master/cdc/sinkv2/eventsink/event.go</span>
+<span class="k">type</span> <span class="n">CallbackFunc</span> <span class="k">func</span><span class="p">()</span>
+
+<span class="k">type</span> <span class="n">CallbackableEvent</span><span class="p">[</span><span class="n">E</span> <span class="n">TableEvent</span><span class="p">]</span> <span class="k">struct</span> <span class="p">{</span>
+	<span class="n">Event</span>     <span class="n">E</span>
+	<span class="n">Callback</span>  <span class="n">CallbackFunc</span>
+	<span class="o">...</span>
+<span class="p">}</span>
+
+<span class="c">// RowChangeCallbackableEvent 是行变更事件，它可以被回调。</span>
+<span class="k">type</span> <span class="n">RowChangeCallbackableEvent</span> <span class="o">=</span> <span class="n">CallbackableEvent</span><span class="p">[</span><span class="o">*</span><span class="n">model</span><span class="o">.</span><span class="n">RowChangedEvent</span><span class="p">]</span>
+
+<span class="c">// TxnCallbackableEvent 是单表事务事件，它可以被回调。</span>
+<span class="k">type</span> <span class="n">TxnCallbackableEvent</span> <span class="o">=</span> <span class="n">CallbackableEvent</span><span class="p">[</span><span class="o">*</span><span class="n">model</span><span class="o">.</span><span class="n">SingleTableTxn</span><span class="p">]</span>
+</code></pre></div></div>
+
+<p>有了这两种不同的可以回调的 Event，我们就可以实现具体的聚合策略了。为了复用代码，我们将聚合策略抽象为一个接口：</p>
+
+<div class="language-golang highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c">// https://github.com/pingcap/tiflow/blob/master/cdc/sinkv2/eventsink/event_appender.go</span>
+<span class="k">type</span> <span class="n">Appender</span><span class="p">[</span><span class="n">E</span> <span class="n">TableEvent</span><span class="p">]</span> <span class="k">interface</span> <span class="p">{</span>
+	<span class="c">// Append 添加一批行变更事件到缓存中。</span>
+	<span class="n">Append</span><span class="p">(</span><span class="n">buffer</span> <span class="p">[]</span><span class="n">E</span><span class="p">,</span> <span class="n">rows</span> <span class="o">...*</span><span class="n">model</span><span class="o">.</span><span class="n">RowChangedEvent</span><span class="p">)</span> <span class="p">[]</span><span class="n">E</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p><strong>这样我们只需要实现 <code class="language-plaintext highlighter-rouge">Append</code> 方法，就可以实现不同的聚合策略了。</strong></p>
+
+<p>对于 <code class="language-plaintext highlighter-rouge">RowChangeCallbackableEvent</code> 来说，我们并没有实际上的聚合操作，只是将行变更事件<strong>顺序</strong>追加到当前的缓存中：</p>
+
+<div class="language-golang highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c">// https://github.com/pingcap/tiflow/blob/master/cdc/sinkv2/eventsink/event_appender.go</span>
+<span class="k">func</span> <span class="p">(</span><span class="n">r</span> <span class="o">*</span><span class="n">RowChangeEventAppender</span><span class="p">)</span> <span class="n">Append</span><span class="p">(</span>
+	<span class="n">buffer</span> <span class="p">[]</span><span class="o">*</span><span class="n">model</span><span class="o">.</span><span class="n">RowChangedEvent</span><span class="p">,</span>
+	<span class="n">rows</span> <span class="o">...*</span><span class="n">model</span><span class="o">.</span><span class="n">RowChangedEvent</span><span class="p">,</span>
+<span class="p">)</span> <span class="p">[]</span><span class="o">*</span><span class="n">model</span><span class="o">.</span><span class="n">RowChangedEvent</span> <span class="p">{</span>
+	<span class="k">return</span> <span class="nb">append</span><span class="p">(</span><span class="n">buffer</span><span class="p">,</span> <span class="n">rows</span><span class="o">...</span><span class="p">)</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>对于 <code class="language-plaintext highlighter-rouge">TxnCallbackableEvent</code> 来说，我们需要将行变更事件聚合到一个事务中：</p>
+
+<div class="language-golang highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c">// https://github.com/pingcap/tiflow/blob/master/cdc/sinkv2/eventsink/event_appender.go</span>
+<span class="k">func</span> <span class="p">(</span><span class="n">t</span> <span class="o">*</span><span class="n">TxnEventAppender</span><span class="p">)</span> <span class="n">Append</span><span class="p">(</span>
+	<span class="n">buffer</span> <span class="p">[]</span><span class="o">*</span><span class="n">model</span><span class="o">.</span><span class="n">SingleTableTxn</span><span class="p">,</span>
+	<span class="n">rows</span> <span class="o">...*</span><span class="n">model</span><span class="o">.</span><span class="n">RowChangedEvent</span><span class="p">,</span>
+<span class="p">)</span> <span class="p">[]</span><span class="o">*</span><span class="n">model</span><span class="o">.</span><span class="n">SingleTableTxn</span> <span class="p">{</span>
+	<span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">row</span> <span class="o">:=</span> <span class="k">range</span> <span class="n">rows</span> <span class="p">{</span>
+		<span class="c">// 这意味我们目前还没有任何事务，所以我们需要创建一个新的事务。</span>
+		<span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">buffer</span><span class="p">)</span> <span class="o">==</span> <span class="m">0</span> <span class="p">{</span>
+			<span class="n">txn</span> <span class="o">:=</span> <span class="o">&amp;</span><span class="n">model</span><span class="o">.</span><span class="n">SingleTableTxn</span><span class="p">{</span>
+				<span class="n">StartTs</span><span class="o">:</span>   <span class="n">row</span><span class="o">.</span><span class="n">StartTs</span><span class="p">,</span>
+				<span class="n">CommitTs</span><span class="o">:</span>  <span class="n">row</span><span class="o">.</span><span class="n">CommitTs</span><span class="p">,</span>
+				<span class="n">Table</span><span class="o">:</span>     <span class="n">row</span><span class="o">.</span><span class="n">Table</span><span class="p">,</span>
+				<span class="n">TableInfo</span><span class="o">:</span> <span class="n">row</span><span class="o">.</span><span class="n">TableInfo</span><span class="p">,</span>
+			<span class="p">}</span>
+			<span class="n">txn</span><span class="o">.</span><span class="n">Append</span><span class="p">(</span><span class="n">row</span><span class="p">)</span>
+			<span class="n">buffer</span> <span class="o">=</span> <span class="nb">append</span><span class="p">(</span><span class="n">buffer</span><span class="p">,</span> <span class="n">txn</span><span class="p">)</span>
+			<span class="k">continue</span>
+		<span class="p">}</span>
+
+		<span class="n">lastTxn</span> <span class="o">:=</span> <span class="n">buffer</span><span class="p">[</span><span class="nb">len</span><span class="p">(</span><span class="n">buffer</span><span class="p">)</span><span class="o">-</span><span class="m">1</span><span class="p">]</span>
+
+		<span class="n">lastCommitTs</span> <span class="o">:=</span> <span class="n">lastTxn</span><span class="o">.</span><span class="n">GetCommitTs</span><span class="p">()</span>
+		<span class="o">...</span>
+		<span class="c">// 使用 StartTs 来判断是否是同一个事务。如果不是同一个事务，我们需要创建一个新的事务。</span>
+		<span class="k">if</span> <span class="n">row</span><span class="o">.</span><span class="n">SplitTxn</span> <span class="o">||</span> <span class="n">lastTxn</span><span class="o">.</span><span class="n">StartTs</span> <span class="o">!=</span> <span class="n">row</span><span class="o">.</span><span class="n">StartTs</span> <span class="p">{</span>
+			<span class="n">buffer</span> <span class="o">=</span> <span class="nb">append</span><span class="p">(</span><span class="n">buffer</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">model</span><span class="o">.</span><span class="n">SingleTableTxn</span><span class="p">{</span>
+				<span class="n">StartTs</span><span class="o">:</span>   <span class="n">row</span><span class="o">.</span><span class="n">StartTs</span><span class="p">,</span>
+				<span class="n">CommitTs</span><span class="o">:</span>  <span class="n">row</span><span class="o">.</span><span class="n">CommitTs</span><span class="p">,</span>
+				<span class="n">Table</span><span class="o">:</span>     <span class="n">row</span><span class="o">.</span><span class="n">Table</span><span class="p">,</span>
+				<span class="n">TableInfo</span><span class="o">:</span> <span class="n">row</span><span class="o">.</span><span class="n">TableInfo</span><span class="p">,</span>
+			<span class="p">})</span>
+		<span class="p">}</span>
+
+		<span class="n">buffer</span><span class="p">[</span><span class="nb">len</span><span class="p">(</span><span class="n">buffer</span><span class="p">)</span><span class="o">-</span><span class="m">1</span><span class="p">]</span><span class="o">.</span><span class="n">Append</span><span class="p">(</span><span class="n">row</span><span class="p">)</span>
+	<span class="p">}</span>
+
+	<span class="k">return</span> <span class="n">buffer</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>在上面的代码中，我们将 StartTs 作为界限，将行变更事件聚合到一个事务中。<strong>在 TiDB 中两个事务的 CommitTs 可能相同，但是 StartTs 一定不同，所以我们可以通过 StartTs 来判断行变更是否属于同一个事务。</strong></p>
+
+<p>有了不同聚合策略的 <code class="language-plaintext highlighter-rouge">Appender</code>，我们就可以实现具体的 Table Sink 了。首先是 <code class="language-plaintext highlighter-rouge">AppendRowChangedEvents</code> 方法，得益于 <code class="language-plaintext highlighter-rouge">Appender</code> 的抽象，我们的具体实现可以非常简单：</p>
+
+<div class="language-golang highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c">// https://github.com/pingcap/tiflow/blob/master/cdc/sinkv2/tablesink/table_sink.go</span>
+<span class="k">func</span> <span class="p">(</span><span class="n">e</span> <span class="o">*</span><span class="n">EventTableSink</span><span class="p">[</span><span class="n">E</span><span class="p">])</span> <span class="n">AppendRowChangedEvents</span><span class="p">(</span><span class="n">rows</span> <span class="o">...*</span><span class="n">model</span><span class="o">.</span><span class="n">RowChangedEvent</span><span class="p">)</span> <span class="p">{</span>
+	<span class="n">e</span><span class="o">.</span><span class="n">eventBuffer</span> <span class="o">=</span> <span class="n">e</span><span class="o">.</span><span class="n">eventAppender</span><span class="o">.</span><span class="n">Append</span><span class="p">(</span><span class="n">e</span><span class="o">.</span><span class="n">eventBuffer</span><span class="p">,</span> <span class="n">rows</span><span class="o">...</span><span class="p">)</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>其次是 <code class="language-plaintext highlighter-rouge">UpdateResolvedTs</code> 方法，它会将当前的缓存中的所有 Event 写入到具体的 Event Sink 中：</p>
+
+<div class="language-golang highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c">// https://github.com/pingcap/tiflow/blob/master/cdc/sinkv2/tablesink/table_sink.go</span>
+<span class="k">func</span> <span class="p">(</span><span class="n">e</span> <span class="o">*</span><span class="n">EventTableSink</span><span class="p">[</span><span class="n">E</span><span class="p">])</span> <span class="n">UpdateResolvedTs</span><span class="p">(</span><span class="n">resolvedTs</span> <span class="n">model</span><span class="o">.</span><span class="n">ResolvedTs</span><span class="p">)</span> <span class="kt">error</span> <span class="p">{</span>
+	<span class="o">...</span>
+	<span class="c">// 从缓存中找到第一个大于 resolvedTs 的数据。</span>
+	<span class="n">i</span> <span class="o">:=</span> <span class="n">sort</span><span class="o">.</span><span class="n">Search</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">e</span><span class="o">.</span><span class="n">eventBuffer</span><span class="p">),</span> <span class="k">func</span><span class="p">(</span><span class="n">i</span> <span class="kt">int</span><span class="p">)</span> <span class="kt">bool</span> <span class="p">{</span>
+		<span class="k">return</span> <span class="n">e</span><span class="o">.</span><span class="n">eventBuffer</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="o">.</span><span class="n">GetCommitTs</span><span class="p">()</span> <span class="o">&gt;</span> <span class="n">resolvedTs</span><span class="o">.</span><span class="n">Ts</span>
+	<span class="p">})</span>
+	<span class="o">...</span>
+	<span class="c">// 将该数据之前的所有数据取出来。</span>
+	<span class="n">resolvedEvents</span> <span class="o">:=</span> <span class="n">e</span><span class="o">.</span><span class="n">eventBuffer</span><span class="p">[</span><span class="o">:</span><span class="n">i</span><span class="p">]</span>
+
+	<span class="o">...</span>
+
+	<span class="c">// 为每一个取出来的数据创建一个 CallbackableEvent。</span>
+	<span class="n">resolvedCallbackableEvents</span> <span class="o">:=</span> <span class="nb">make</span><span class="p">([]</span><span class="o">*</span><span class="n">eventsink</span><span class="o">.</span><span class="n">CallbackableEvent</span><span class="p">[</span><span class="n">E</span><span class="p">],</span> <span class="m">0</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">resolvedEvents</span><span class="p">))</span>
+	<span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">ev</span> <span class="o">:=</span> <span class="k">range</span> <span class="n">resolvedEvents</span> <span class="p">{</span>
+		<span class="n">ce</span> <span class="o">:=</span> <span class="o">&amp;</span><span class="n">eventsink</span><span class="o">.</span><span class="n">CallbackableEvent</span><span class="p">[</span><span class="n">E</span><span class="p">]{</span>
+			<span class="n">Event</span><span class="o">:</span>     <span class="n">ev</span><span class="p">,</span>
+			<span class="n">Callback</span><span class="o">:</span>  <span class="n">e</span><span class="o">.</span><span class="n">progressTracker</span><span class="o">.</span><span class="n">addEvent</span><span class="p">(),</span>
+			<span class="n">SinkState</span><span class="o">:</span> <span class="o">&amp;</span><span class="n">e</span><span class="o">.</span><span class="n">state</span><span class="p">,</span>
+		<span class="p">}</span>
+		<span class="n">resolvedCallbackableEvents</span> <span class="o">=</span> <span class="nb">append</span><span class="p">(</span><span class="n">resolvedCallbackableEvents</span><span class="p">,</span> <span class="n">ce</span><span class="p">)</span>
+	<span class="p">}</span>
+
+	<span class="o">...</span>
+
+	<span class="c">// 将取出来的数据写入到下游。</span>
+	<span class="k">return</span> <span class="n">e</span><span class="o">.</span><span class="n">backendSink</span><span class="o">.</span><span class="n">WriteEvents</span><span class="p">(</span><span class="n">resolvedCallbackableEvents</span><span class="o">...</span><span class="p">)</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>可以看到在 <code class="language-plaintext highlighter-rouge">UpdateResolvedTs</code> 方法中，我们将缓存中的数据以 <code class="language-plaintext highlighter-rouge">ResolvedTs</code> 为界限取出来，然后将其转换为 <code class="language-plaintext highlighter-rouge">CallbackableEvent</code>，最后将其写入到具体的 backendSink 中。<strong>需要注意的是，我们能这样做的前提是数据在之前的模块中已经经过了排序，这样我们才能保证数据的顺序性。</strong></p>
+
+<p>以上就是 Table Sink 的核心实现，只要实现不同的 <code class="language-plaintext highlighter-rouge">Appender</code>，我们就可以实现不同的 Table Sink。目前 TiCDC 主要支持的就是上述的两种聚合策略，你可以根据自己的需求来选择不同的聚合策略。<strong>一般来说，你不需要自己实现 Table Sink，目前的两种聚合策略已经能满足大部分的需求。</strong></p>
+
+<h2 id="event-sink">Event Sink</h2>
+
+<p>在 TiCDC 中，<a href="https://github.com/pingcap/tiflow/tree/master/cdc/sinkv2/eventsink">Event Sink</a> 是真实与外部系统交互的模块，它的主要职责是将 Table Sink 中的数据写入到外部系统中。它的主要接口如下：</p>
+
+<div class="language-golang highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c">// https://github.com/pingcap/tiflow/blob/master/cdc/sinkv2/eventsink/event_sink.go</span>
+<span class="k">type</span> <span class="n">EventSink</span><span class="p">[</span><span class="n">E</span> <span class="n">TableEvent</span><span class="p">]</span> <span class="k">interface</span> <span class="p">{</span>
+	<span class="c">// WriteEvents 将数据写入到外部系统中。</span>
+	<span class="c">// 注意：这是一个异步且线程安全的方法。</span>
+	<span class="n">WriteEvents</span><span class="p">(</span><span class="n">events</span> <span class="o">...*</span><span class="n">CallbackableEvent</span><span class="p">[</span><span class="n">E</span><span class="p">])</span> <span class="kt">error</span>
+	<span class="c">// Close 关闭 Event Sink。</span>
+	<span class="c">// 注意：我们需要保证这个方法是可取消或者可中断的。</span>
+	<span class="n">Close</span><span class="p">()</span> <span class="kt">error</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>这个接口的实现是与具体的外部系统相关的，我们以 <a href="https://github.com/pingcap/tiflow/tree/master/cdc/sinkv2/eventsink/mq">MQ Event Sink</a> 为例来看一下它的实现：</p>
+
+<div class="language-golang highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c">// https://github.com/pingcap/tiflow/blob/master/cdc/sinkv2/eventsink/mq/mq_dml_sink.go</span>
+<span class="k">type</span> <span class="n">dmlSink</span> <span class="k">struct</span> <span class="p">{</span>
+	<span class="o">...</span>
+	<span class="n">worker</span> <span class="o">*</span><span class="n">worker</span>
+	<span class="o">...</span>
+	<span class="n">ctx</span>    <span class="n">context</span><span class="o">.</span><span class="n">Context</span>
+	<span class="n">cancel</span> <span class="n">context</span><span class="o">.</span><span class="n">CancelFunc</span>
+<span class="p">}</span>
+</code></pre></div></div>
+<p>可以看到，它的实现中包含了一个 <code class="language-plaintext highlighter-rouge">worker</code>，这个 <code class="language-plaintext highlighter-rouge">worker</code> 用来处理写入到外部系统的数据。它的主要职责是将写入的数据进行编码，把 TiDB 的数据类型转化为 MQ 系统的数据类型，然后异步的将数据写入到 MQ 系统中。我们在这里就不展开讲解了，因为它的实现与具体的外部系统相关，你可以在 <a href="https://github.com/pingcap/tiflow/tree/master/cdc/sinkv2">Sink 模块</a> 中找到它的具体实现。</p>
+
+<p>我们来看一下 <code class="language-plaintext highlighter-rouge">WriteEvents</code> 方法的实现：</p>
+
+<div class="language-golang highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c">// https://github.com/pingcap/tiflow/blob/master/cdc/sinkv2/eventsink/mq/mq_dml_sink.go</span>
+<span class="k">func</span> <span class="p">(</span><span class="n">s</span> <span class="o">*</span><span class="n">dmlSink</span><span class="p">)</span> <span class="n">WriteEvents</span><span class="p">(</span><span class="n">rows</span> <span class="o">...*</span><span class="n">eventsink</span><span class="o">.</span><span class="n">RowChangeCallbackableEvent</span><span class="p">)</span> <span class="kt">error</span> <span class="p">{</span>
+	<span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">row</span> <span class="o">:=</span> <span class="k">range</span> <span class="n">rows</span> <span class="p">{</span>
+		<span class="o">...</span>
+		<span class="c">// 将数据通过 channel 发送到 worker 中。</span>
+		<span class="n">s</span><span class="o">.</span><span class="n">worker</span><span class="o">.</span><span class="n">msgChan</span><span class="o">.</span><span class="n">In</span><span class="p">()</span> <span class="o">&lt;-</span> <span class="n">mqEvent</span><span class="p">{</span>
+			<span class="o">...</span>
+			<span class="n">rowEvent</span><span class="o">:</span> <span class="n">row</span><span class="p">,</span>
+		<span class="p">}</span>
+	<span class="p">}</span>
+
+	<span class="k">return</span> <span class="no">nil</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>它的实现非常简单，就是将数据通过 channel 发送到 worker 中，然后 worker 封装了具体的写入逻辑，主要是将数据进行编码后调用外部系统的 API 进行写入。例如：将 TiDB 的数据编码为一条 Kafka 消息，然后调用 Kafka 生产者的 Produce 方法进行写入。</p>
+
+<p><strong>我们可以注意到，这里的 <code class="language-plaintext highlighter-rouge">rows</code> 都是从 Table Sink 中下发的可以回调的数据，在 worker 写入成功后，我们就可以通过回调的方式来通知 Table Sink 数据已经写入成功。</strong></p>
+
+<h2 id="ddl-sink">DDL Sink</h2>
+
+<p>在 TiCDC 中，DDL Event 比较特殊，因为 DDL 是全局共用的，所以我们只需要有一个 DDL Sink 按照顺序将 DDL 写入到外部系统中即可。它的主要接口如下：</p>
+
+<div class="language-golang highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c">// https://github.com/pingcap/tiflow/blob/master/cdc/sinkv2/ddlsink/ddl_sink.go</span>
+<span class="k">type</span> <span class="n">DDLEventSink</span> <span class="k">interface</span> <span class="p">{</span>
+	<span class="c">// WriteDDLEvent 将 DDL 写入到外部系统中。</span>
+	<span class="c">// 注意：这是一个同步且线程安全的方法。</span>
+	<span class="n">WriteDDLEvent</span><span class="p">(</span><span class="n">ctx</span> <span class="n">context</span><span class="o">.</span><span class="n">Context</span><span class="p">,</span> <span class="n">ddl</span> <span class="o">*</span><span class="n">model</span><span class="o">.</span><span class="n">DDLEvent</span><span class="p">)</span> <span class="kt">error</span>
+	<span class="c">// WriteCheckpointTs 将 CheckpointTs 写入到外部系统中。</span>
+	<span class="c">// 注意：这是一个同步且线程安全的方法。</span>
+	<span class="c">// 目前只有 MQ DDL Sink 会实现这个方法。</span>
+	<span class="n">WriteCheckpointTs</span><span class="p">(</span><span class="n">ctx</span> <span class="n">context</span><span class="o">.</span><span class="n">Context</span><span class="p">,</span> <span class="n">ts</span> <span class="kt">uint64</span><span class="p">,</span> <span class="n">tables</span> <span class="p">[]</span><span class="o">*</span><span class="n">model</span><span class="o">.</span><span class="n">TableInfo</span><span class="p">)</span> <span class="kt">error</span>
+	<span class="c">// Close 关闭 DDL Sink 和释放相关资源。</span>
+	<span class="n">Close</span><span class="p">()</span> <span class="kt">error</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>它的核心方法是 <code class="language-plaintext highlighter-rouge">WriteDDLEvent</code>，我们将 DDL Event 传入之后，它会将 DDL Event 进行编码，然后写入到外部系统中。例如：将 TiDB 的 DDL Event 编码为一条 Kafka 消息，然后调用 Kafka 生产者的 Produce 方法进行写入。<strong>注意，这个方法的实现需要是同步的，因为 DDL 数量不会很多，所以我们可以将它的实现设置为同步的，这样可以避免一些并发问题，让实现变得简单。</strong></p>
+
+<p>值得一提的是，MQ DDL Sink 会实现 <code class="language-plaintext highlighter-rouge">WriteCheckpointTs</code> 方法，它会将 CheckpointTs 写入到 MQ 系统中。它会作为一个特殊的消息告诉下游系统当前的 CheckpointTs，我们可以把它理解成 MQ 系统中的 Watermark。这样，我们在消费 MQ 系统中的消息时，就可以通过 CheckpointTs 来进行过滤，排序等操作。</p>
+
+<h2 id="log-sink-示例">Log Sink 示例</h2>
+
+<p>介绍了上面的各种 Sink 概念和实现之后，我们可以动手自己实现一个简单的 Log Sink 来了解如何为 TiCDC 添加一个新的 Sink。我们可以假设 Log Sink 的主要职责就是将所有的数据输出到日志中。我们调用 <code class="language-plaintext highlighter-rouge">log.Info()</code> 写入数据即可。</p>
+
+<p>首先，我们需要确认聚合策略，根据不同的聚合策略我们可以选用不同的 Table Sink 实现。因为我们的 Log Sink 只是简单的将数据写入到日志中，所以我们可以选择 <code class="language-plaintext highlighter-rouge">RowChangeEventAppender</code> 作为我们的 <code class="language-plaintext highlighter-rouge">Appender</code>。这样每一行数据都会被写入到日志中。</p>
+
+<p>接下来，我们只需要实现一个具体的 Event Sink 和一个 DDL Sink 即可。首先是 Event Sink：</p>
+
+<div class="language-golang highlighter-rouge"><div class="highlight"><pre class="highlight"><code>
+<span class="c">// 断言 LogSink 实现了 EventSink 接口。</span>
+<span class="k">var</span> <span class="n">_</span> <span class="n">eventsink</span><span class="o">.</span><span class="n">EventSink</span><span class="p">[</span><span class="o">*</span><span class="n">model</span><span class="o">.</span><span class="n">RowChangedEvent</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="o">*</span><span class="n">LogSink</span><span class="p">)(</span><span class="no">nil</span><span class="p">)</span>
+
+<span class="k">type</span> <span class="n">LogSink</span> <span class="k">struct</span><span class="p">{}</span>
+
+<span class="c">// New 创建一个新的 LogSink。</span>
+<span class="k">func</span> <span class="n">New</span><span class="p">()</span> <span class="o">*</span><span class="n">LogSink</span> <span class="p">{</span>
+	<span class="k">return</span> <span class="o">&amp;</span><span class="n">LogSink</span><span class="p">{}</span>
+<span class="p">}</span>
+
+<span class="k">func</span> <span class="p">(</span><span class="n">s</span> <span class="o">*</span><span class="n">LogSink</span><span class="p">)</span> <span class="n">WriteEvents</span><span class="p">(</span><span class="n">rows</span> <span class="o">...*</span><span class="n">eventsink</span><span class="o">.</span><span class="n">CallbackableEvent</span><span class="p">[</span><span class="o">*</span><span class="n">model</span><span class="o">.</span><span class="n">RowChangedEvent</span><span class="p">])</span> <span class="kt">error</span> <span class="p">{</span>
+	<span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">row</span> <span class="o">:=</span> <span class="k">range</span> <span class="n">rows</span> <span class="p">{</span>
+		<span class="n">log</span><span class="o">.</span><span class="n">Info</span><span class="p">(</span><span class="s">"LogSink: WriteEvents"</span><span class="p">,</span> <span class="n">zap</span><span class="o">.</span><span class="n">Any</span><span class="p">(</span><span class="s">"row"</span><span class="p">,</span> <span class="n">row</span><span class="o">.</span><span class="n">Event</span><span class="p">))</span>
+		<span class="c">// 不要忘记调用 Callback 方法来通知 Table Sink 该 Event 已经被处理。</span>
+		<span class="n">row</span><span class="o">.</span><span class="n">Callback</span><span class="p">()</span>
+	<span class="p">}</span>
+
+	<span class="k">return</span> <span class="no">nil</span>
+<span class="p">}</span>
+
+<span class="k">func</span> <span class="p">(</span><span class="n">s</span> <span class="o">*</span><span class="n">LogSink</span><span class="p">)</span> <span class="n">Close</span><span class="p">()</span> <span class="kt">error</span> <span class="p">{</span>
+	<span class="k">return</span> <span class="no">nil</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>我们在实现 <code class="language-plaintext highlighter-rouge">WriteEvents</code> 方法时，只需要将每一行数据写入到日志中即可。在 此外，我们还需要调用 <code class="language-plaintext highlighter-rouge">Callback</code> 方法来通知 Table Sink 该 Event 已经被处理。<strong>注意，所有的 <code class="language-plaintext highlighter-rouge">Callback</code> 方法是必须调用的，否则 Table Sink 会一直等待该 Event 被处理，这样会导致 TiCDC 数据同步卡住。</strong></p>
+
+<p>另外，我们可以注意到我在第一行代码中做了一个断言，这是为了确保我们的 Log Sink 实现了 <code class="language-plaintext highlighter-rouge">EventSink</code> 接口。这样，我们在编译时就可以发现一些错误。建议大家在实现 Sink 时都做这样的断言。</p>
+
+<p>接下来是 DDL Sink：</p>
+
+<div class="language-golang highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c">// 断言 LogSink 实现了 DDLEventSink 接口。</span>
+<span class="k">var</span> <span class="n">_</span> <span class="n">ddlsink</span><span class="o">.</span><span class="n">DDLEventSink</span> <span class="o">=</span> <span class="p">(</span><span class="o">*</span><span class="n">LogSink</span><span class="p">)(</span><span class="no">nil</span><span class="p">)</span>
+
+<span class="k">type</span> <span class="n">LogSink</span> <span class="k">struct</span><span class="p">{}</span>
+
+<span class="c">// New create a black hole DDL sink.</span>
+<span class="k">func</span> <span class="n">New</span><span class="p">()</span> <span class="o">*</span><span class="n">LogSink</span> <span class="p">{</span>
+	<span class="k">return</span> <span class="o">&amp;</span><span class="n">LogSink</span><span class="p">{}</span>
+<span class="p">}</span>
+
+<span class="k">func</span> <span class="p">(</span><span class="n">d</span> <span class="o">*</span><span class="n">LogSink</span><span class="p">)</span> <span class="n">WriteDDLEvent</span><span class="p">(</span><span class="n">ctx</span> <span class="n">context</span><span class="o">.</span><span class="n">Context</span><span class="p">,</span>
+	<span class="n">ddl</span> <span class="o">*</span><span class="n">model</span><span class="o">.</span><span class="n">DDLEvent</span><span class="p">,</span>
+<span class="p">)</span> <span class="kt">error</span> <span class="p">{</span>
+	<span class="n">log</span><span class="o">.</span><span class="n">Info</span><span class="p">(</span><span class="s">"LogSink: DDL Event"</span><span class="p">,</span> <span class="n">zap</span><span class="o">.</span><span class="n">Any</span><span class="p">(</span><span class="s">"ddl"</span><span class="p">,</span> <span class="n">ddl</span><span class="p">))</span>
+	<span class="k">return</span> <span class="no">nil</span>
+<span class="p">}</span>
+
+<span class="k">func</span> <span class="p">(</span><span class="n">d</span> <span class="o">*</span><span class="n">LogSink</span><span class="p">)</span> <span class="n">WriteCheckpointTs</span><span class="p">(</span><span class="n">ctx</span> <span class="n">context</span><span class="o">.</span><span class="n">Context</span><span class="p">,</span>
+	<span class="n">ts</span> <span class="kt">uint64</span><span class="p">,</span> <span class="n">tables</span> <span class="p">[]</span><span class="o">*</span><span class="n">model</span><span class="o">.</span><span class="n">TableInfo</span><span class="p">,</span>
+<span class="p">)</span> <span class="kt">error</span> <span class="p">{</span>
+	<span class="n">log</span><span class="o">.</span><span class="n">Info</span><span class="p">(</span><span class="s">"LogSink: Checkpoint Ts Event"</span><span class="p">,</span> <span class="n">zap</span><span class="o">.</span><span class="n">Uint64</span><span class="p">(</span><span class="s">"ts"</span><span class="p">,</span> <span class="n">ts</span><span class="p">),</span> <span class="n">zap</span><span class="o">.</span><span class="n">Any</span><span class="p">(</span><span class="s">"tables"</span><span class="p">,</span> <span class="n">tables</span><span class="p">))</span>
+	<span class="k">return</span> <span class="no">nil</span>
+<span class="p">}</span>
+
+<span class="c">// Close do nothing.</span>
+<span class="k">func</span> <span class="p">(</span><span class="n">d</span> <span class="o">*</span><span class="n">LogSink</span><span class="p">)</span> <span class="n">Close</span><span class="p">()</span> <span class="kt">error</span> <span class="p">{</span>
+	<span class="k">return</span> <span class="no">nil</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>DDL Sink 的实现非常简单，我们只需要将 DDL Event 写入到日志中即可。</p>
+
+<p>有了具体的 Event Sink 和 DDL Sink 之后，我们就可以尝试将其接入到 TiCDC 中了。在接入之前，<strong>我们需要了解一下 TiCDC 目前是如何构造 Sink 的。
+因为 golang 范型的限制，我们无法直接将一个带范型的 Event Sink 传递给 Table Sink。所以我们构建了一个<a href="https://github.com/pingcap/tiflow/tree/master/cdc/sinkv2/eventsink/factory">构造工厂</a>来解决这个问题：</strong></p>
+
+<div class="language-golang highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c">// https://github.com/pingcap/tiflow/blob/master/cdc/sinkv2/eventsink/factory/factory.go</span>
+<span class="k">type</span> <span class="n">SinkFactory</span> <span class="k">struct</span> <span class="p">{</span>
+	<span class="n">sinkType</span> <span class="n">sink</span><span class="o">.</span><span class="n">Type</span>
+	<span class="n">rowSink</span>  <span class="n">eventsink</span><span class="o">.</span><span class="n">EventSink</span><span class="p">[</span><span class="o">*</span><span class="n">model</span><span class="o">.</span><span class="n">RowChangedEvent</span><span class="p">]</span>
+	<span class="n">txnSink</span>  <span class="n">eventsink</span><span class="o">.</span><span class="n">EventSink</span><span class="p">[</span><span class="o">*</span><span class="n">model</span><span class="o">.</span><span class="n">SingleTableTxn</span><span class="p">]</span>
+<span class="p">}</span>
+
+<span class="c">// New 根据协议类型创建一个 SinkFactory。</span>
+<span class="k">func</span> <span class="n">New</span><span class="p">(</span><span class="n">ctx</span> <span class="n">context</span><span class="o">.</span><span class="n">Context</span><span class="p">,</span>
+	<span class="n">sinkURIStr</span> <span class="kt">string</span><span class="p">,</span>
+	<span class="n">cfg</span> <span class="o">*</span><span class="n">config</span><span class="o">.</span><span class="n">ReplicaConfig</span><span class="p">,</span>
+	<span class="n">errCh</span> <span class="k">chan</span> <span class="kt">error</span><span class="p">,</span>
+<span class="p">)</span> <span class="p">(</span><span class="o">*</span><span class="n">SinkFactory</span><span class="p">,</span> <span class="kt">error</span><span class="p">)</span> <span class="p">{</span>
+	<span class="n">sinkURI</span><span class="p">,</span> <span class="n">err</span> <span class="o">:=</span> <span class="n">config</span><span class="o">.</span><span class="n">GetSinkURIAndAdjustConfigWithSinkURI</span><span class="p">(</span><span class="n">sinkURIStr</span><span class="p">,</span> <span class="n">cfg</span><span class="p">)</span>
+	<span class="k">if</span> <span class="n">err</span> <span class="o">!=</span> <span class="no">nil</span> <span class="p">{</span>
+		<span class="k">return</span> <span class="no">nil</span><span class="p">,</span> <span class="n">err</span>
+	<span class="p">}</span>
+
+	<span class="n">s</span> <span class="o">:=</span> <span class="o">&amp;</span><span class="n">SinkFactory</span><span class="p">{}</span>
+	<span class="n">schema</span> <span class="o">:=</span> <span class="n">strings</span><span class="o">.</span><span class="n">ToLower</span><span class="p">(</span><span class="n">sinkURI</span><span class="o">.</span><span class="n">Scheme</span><span class="p">)</span>
+	<span class="k">switch</span> <span class="n">schema</span> <span class="p">{</span>
+	<span class="k">case</span> <span class="n">sink</span><span class="o">.</span><span class="n">MySQLScheme</span><span class="p">,</span> <span class="n">sink</span><span class="o">.</span><span class="n">MySQLSSLScheme</span><span class="p">,</span> <span class="n">sink</span><span class="o">.</span><span class="n">TiDBScheme</span><span class="p">,</span> <span class="n">sink</span><span class="o">.</span><span class="n">TiDBSSLScheme</span><span class="o">:</span>
+		<span class="n">txnSink</span><span class="p">,</span> <span class="n">err</span> <span class="o">:=</span> <span class="n">txn</span><span class="o">.</span><span class="n">NewMySQLSink</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="n">sinkURI</span><span class="p">,</span> <span class="n">cfg</span><span class="p">,</span> <span class="n">errCh</span><span class="p">,</span> <span class="n">txn</span><span class="o">.</span><span class="n">DefaultConflictDetectorSlots</span><span class="p">)</span>
+		<span class="k">if</span> <span class="n">err</span> <span class="o">!=</span> <span class="no">nil</span> <span class="p">{</span>
+			<span class="k">return</span> <span class="no">nil</span><span class="p">,</span> <span class="n">err</span>
+		<span class="p">}</span>
+		<span class="n">s</span><span class="o">.</span><span class="n">txnSink</span> <span class="o">=</span> <span class="n">txnSink</span>
+		<span class="n">s</span><span class="o">.</span><span class="n">sinkType</span> <span class="o">=</span> <span class="n">sink</span><span class="o">.</span><span class="n">TxnSink</span>
+	<span class="k">case</span> <span class="n">sink</span><span class="o">.</span><span class="n">KafkaScheme</span><span class="p">,</span> <span class="n">sink</span><span class="o">.</span><span class="n">KafkaSSLScheme</span><span class="o">:</span>
+		<span class="n">mqs</span><span class="p">,</span> <span class="n">err</span> <span class="o">:=</span> <span class="n">mq</span><span class="o">.</span><span class="n">NewKafkaDMLSink</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="n">sinkURI</span><span class="p">,</span> <span class="n">cfg</span><span class="p">,</span> <span class="n">errCh</span><span class="p">,</span>
+			<span class="n">kafka</span><span class="o">.</span><span class="n">NewSaramaAdminClient</span><span class="p">,</span> <span class="n">kafka</span><span class="o">.</span><span class="n">NewSaramaClient</span><span class="p">,</span> <span class="n">dmlproducer</span><span class="o">.</span><span class="n">NewKafkaDMLProducer</span><span class="p">)</span>
+		<span class="k">if</span> <span class="n">err</span> <span class="o">!=</span> <span class="no">nil</span> <span class="p">{</span>
+			<span class="k">return</span> <span class="no">nil</span><span class="p">,</span> <span class="n">err</span>
+		<span class="p">}</span>
+		<span class="n">s</span><span class="o">.</span><span class="n">rowSink</span> <span class="o">=</span> <span class="n">mqs</span>
+		<span class="n">s</span><span class="o">.</span><span class="n">sinkType</span> <span class="o">=</span> <span class="n">sink</span><span class="o">.</span><span class="n">RowSink</span>
+	<span class="o">...</span>
+	<span class="k">default</span><span class="o">:</span>
+		<span class="k">return</span> <span class="no">nil</span><span class="p">,</span>
+			<span class="n">cerror</span><span class="o">.</span><span class="n">ErrSinkURIInvalid</span><span class="o">.</span><span class="n">GenWithStack</span><span class="p">(</span><span class="s">"the sink scheme (%s) is not supported"</span><span class="p">,</span> <span class="n">schema</span><span class="p">)</span>
+	<span class="p">}</span>
+
+	<span class="k">return</span> <span class="n">s</span><span class="p">,</span> <span class="no">nil</span>
+<span class="p">}</span>
+
+<span class="c">// CreateTableSink 创建一个 Table Sink，并且传入 Event Sink。</span>
+<span class="k">func</span> <span class="p">(</span><span class="n">s</span> <span class="o">*</span><span class="n">SinkFactory</span><span class="p">)</span> <span class="n">CreateTableSink</span><span class="p">(</span>
+	<span class="n">changefeedID</span> <span class="n">model</span><span class="o">.</span><span class="n">ChangeFeedID</span><span class="p">,</span> <span class="n">span</span> <span class="n">tablepb</span><span class="o">.</span><span class="n">Span</span><span class="p">,</span> <span class="n">totalRowsCounter</span> <span class="n">prometheus</span><span class="o">.</span><span class="n">Counter</span><span class="p">,</span>
+<span class="p">)</span> <span class="n">tablesink</span><span class="o">.</span><span class="n">TableSink</span> <span class="p">{</span>
+	<span class="k">switch</span> <span class="n">s</span><span class="o">.</span><span class="n">sinkType</span> <span class="p">{</span>
+	<span class="k">case</span> <span class="n">sink</span><span class="o">.</span><span class="n">RowSink</span><span class="o">:</span>
+		<span class="c">// 我们需要在这里显式地指定 Event Sink 的类型。否则 golang 无法推断出该类型。</span>
+		<span class="k">return</span> <span class="n">tablesink</span><span class="o">.</span><span class="n">New</span><span class="p">[</span><span class="o">*</span><span class="n">model</span><span class="o">.</span><span class="n">RowChangedEvent</span><span class="p">](</span><span class="n">changefeedID</span><span class="p">,</span> <span class="n">span</span><span class="p">,</span>
+			<span class="n">s</span><span class="o">.</span><span class="n">rowSink</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">eventsink</span><span class="o">.</span><span class="n">RowChangeEventAppender</span><span class="p">{},</span> <span class="n">totalRowsCounter</span><span class="p">)</span>
+	<span class="k">case</span> <span class="n">sink</span><span class="o">.</span><span class="n">TxnSink</span><span class="o">:</span>
+		<span class="k">return</span> <span class="n">tablesink</span><span class="o">.</span><span class="n">New</span><span class="p">[</span><span class="o">*</span><span class="n">model</span><span class="o">.</span><span class="n">SingleTableTxn</span><span class="p">](</span><span class="n">changefeedID</span><span class="p">,</span> <span class="n">span</span><span class="p">,</span>
+			<span class="n">s</span><span class="o">.</span><span class="n">txnSink</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">eventsink</span><span class="o">.</span><span class="n">TxnEventAppender</span><span class="p">{},</span> <span class="n">totalRowsCounter</span><span class="p">)</span>
+	<span class="k">default</span><span class="o">:</span>
+		<span class="nb">panic</span><span class="p">(</span><span class="s">"unknown sink type"</span><span class="p">)</span>
+	<span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>首先，我们通过 <code class="language-plaintext highlighter-rouge">New</code> 函数根据协议类型创建一个 SinkFactory。这个过程中我们会创建一个 Event Sink 的具体实例。比如我们新增了 Log Sink，那么我们就可以在这里创建一个 Log Sink 的实例：</p>
+
+<div class="language-diff highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="err">//</span> https://github.com/pingcap/tiflow/blob/master/cdc/sinkv2/eventsink/factory/factory.go
+<span class="p">func New(ctx context.Context,
+</span>	sinkURIStr string,
+	cfg *config.ReplicaConfig,
+	errCh chan error,
+<span class="err">)</span> (*SinkFactory, error) {
+	sinkURI, err := config.GetSinkURIAndAdjustConfigWithSinkURI(sinkURIStr, cfg)
+	if err != nil {
+		return nil, err
+	}
+
+	s := &amp;SinkFactory{}
+	schema := strings.ToLower(sinkURI.Scheme)
+	switch schema {
+	...
+	...
+<span class="gi">+	case sink.LogScheme:
++		s.rowSink = logsink.New()
++		// 根据我们上面选择的聚合策略，我们选择 RowSink。
++		s.sinkType = sink.RowSink
+</span>	default:
+		return nil,
+			cerror.ErrSinkURIInvalid.GenWithStack("the sink scheme (%s) is not supported", schema)
+	}
+
+	return s, nil
+<span class="err">}</span>
+</code></pre></div></div>
+
+<p>在这里我们新增了一个 <code class="language-plaintext highlighter-rouge">LogScheme</code>，假设它为 <code class="language-plaintext highlighter-rouge">log://</code>，那么当用户传入 <code class="language-plaintext highlighter-rouge">--sink-uri="log://"</code> 时，我们就会创建一个 Log Sink 的实例。<strong>在创建过程中我们使用了 <code class="language-plaintext highlighter-rouge">sink.RowSink</code> 作为 Table Sink 的类型，这是因为我们选择了以行为单位的聚合策略。</strong></p>
+
+<p>最后，我们需要关注一下 <code class="language-plaintext highlighter-rouge">CreateTableSink</code> 函数，这个函数会创建一个 Table Sink，并且传入 Event Sink。可以看到我们在这里根据 <code class="language-plaintext highlighter-rouge">sinkType</code> 指定的范型参数为 <code class="language-plaintext highlighter-rouge">*model.RowChangedEvent</code> 这样就实现了 Table Sink 和 Event Sink 的组合。</p>
+
+<p>这样我们就完整地实现了一个新的 Sink。接下来只需要指定 <code class="language-plaintext highlighter-rouge">--sink-uri="log://"</code> 即可使用我们的 Log Sink。</p>
+
+<h2 id="总结">总结</h2>
+
+<p>本文我介绍了 TiCDC 的 Sink 模块，我们了解了 Sink 详细设计，以及如何实现一个新的 Sink。但是要实现一个可用的 Sink，我们还需要考虑更多的问题，比如：</p>
+
+<ul>
+  <li>数据写入的效率</li>
+  <li>数据编码效率</li>
+  <li>数据写入失败的处理</li>
+  <li>参数和配置的处理</li>
+  <li>单元测试的编写</li>
+  <li>集成测试的编写</li>
+  <li>使用文档的编写</li>
+  <li>模块的可观测性</li>
+  <li>输出的数据如何被消费和使用</li>
+  <li>输出的数据的正确性校验</li>
+</ul>
+
+<p>等等。<strong>所以如果你真的希望自己动手实现一个生产级别的 Sink，那么你可以参考我们目前已经 GA 的 Sink 实现来实现你自己的 Sink。</strong>如果你在实现过程中遇到了问题，欢迎在 TiCDC 的 Issue Tracker 中提出问题我们一起讨论和解决问题。</p>
+
+
+
+    <p class="signature">&mdash; Rustin</p>
+  </div>
+  <script>
+    (function () {
+      anchors.options.placement = 'right';
+      anchors.add('.content > h3, .content > h4, .content > h5, .content > h6');
+    })();
+  </script>
+  <script src="https://giscus.app/client.js" data-repo="Rustin170506/blog"
+    data-repo-id="MDEwOlJlcG9zaXRvcnkyMTU4MDI0NDg=" data-category="Ideas" data-category-id="DIC_kwDODNziUM4CY_bg"
+    data-mapping="title" data-strict="0" data-reactions-enabled="1" data-emit-metadata="0" data-input-position="top"
+    data-theme="light" data-lang="en" data-loading="lazy" crossorigin="anonymous" async>
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Simplifying TiDB Statistics Collection: Unifying Concurrency Controls - Rustin</title>
+  <link rel="stylesheet" href="https://netdna.bootstrapcdn.com/bootstrap/3.1.1/css/bootstrap.min.css" type="text/css">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Merriweather+Sans:400,300,700" type="text/css">
+  <link rel="stylesheet" href="/static/app.css" type="text/css">
+  <link rel="stylesheet" href="/static/syntax.css" type="text/css">
+  <link type="application/atom+xml" rel="alternate" href="http://localhost:4000/feed.xml" />
+  <meta name="theme-color" content="#111111">
+
+  <meta name="og:type" content="article">
+  <meta name="og:title" content="Simplifying TiDB Statistics Collection: Unifying Concurrency Controls – Rustin">
+  <meta name="og:description" content="">
+  <meta name="og:site_name" content="Rustin">
+  <meta name="og:url" content="http://localhost:4000/merge-tidb_build_stats_concurrency-and-tidb_analyze_partition_concurrency/">
+  
+  <meta name="og:image" content="http://localhost:4000/static/default_image.jpg">
+  
+  <meta property="article:published_time" content=" 2024-11-18">
+
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:site" content="@hi_rustin">
+  <meta name="twitter:domain" content="rustin.me">
+  <meta name="twitter:title" content="Simplifying TiDB Statistics Collection: Unifying Concurrency Controls – Rustin">
+  <meta name="twitter:description" content="">
+  
+  <meta name="twitter:image" content="http://localhost:4000/static/default_image.jpg">
+  
+  <meta name="twitter:url" content="http://localhost:4000/merge-tidb_build_stats_concurrency-and-tidb_analyze_partition_concurrency/">
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/anchor-js/3.2.0/anchor.min.js"></script>
+</head>
+
+<body>
+  <header>
+    <h1><a href="/">Rustin</a></h1>
+    <span>I’m a passionate software engineer who specializes in distributed systems and dev tools.</span>
+  </header>
+
+  <div class="content post">
+    <h2>Simplifying TiDB Statistics Collection: Unifying Concurrency Controls</h2>
+    <p class="date">18 November 2024</p>
+
+    <h1 id="background">Background</h1>
+
+<p>TiDB provides the <code class="language-plaintext highlighter-rouge">analyze table table_name</code> command to generate statistics for tables. When analyzing partitioned tables, TiDB processes each partition independently and in parallel. Once analysis completes, TiDB aggregates the individual partition statistics into a single global statistics object for the entire table.</p>
+
+<p>The <code class="language-plaintext highlighter-rouge">analyze table</code> command has two concurrency-related parameters:</p>
+
+<ul>
+  <li><code class="language-plaintext highlighter-rouge">tidb_build_stats_concurrency</code>: Determines how many partitions can be processed simultaneously during statistics collection</li>
+  <li><code class="language-plaintext highlighter-rouge">tidb_analyze_partition_concurrency</code>: Controls parallel workers for saving partition statistics</li>
+</ul>
+
+<p>However, these parameters have several drawbacks:</p>
+
+<ul>
+  <li>The name <code class="language-plaintext highlighter-rouge">tidb_build_stats_concurrency</code> is imprecise - it actually governs parallel processing of partitions/tables rather than statistics building itself</li>
+  <li>Having two separate concurrency controls is unnecessarily complex and makes it difficult for users to understand and predict the performance impact of their settings</li>
+</ul>
+
+<p>In this blog post, we will discuss the issues with the current parameters and propose a solution to merge them into one.</p>
+
+<h1 id="test-result">Test Result</h1>
+
+<h2 id="small-partition-table">Small Partition Table</h2>
+
+<p>To evaluate the performance impact of these parameters, I benchmarked an <code class="language-plaintext highlighter-rouge">analyze table</code> command on a partitioned table containing 100 partitions and 30 million rows. Here are the results:</p>
+
+<blockquote>
+  <p><strong>Note:</strong> Test environment: 3 TiKV nodes and 3 TiDB nodes, each with 16 cores and 32GB RAM.</p>
+</blockquote>
+
+<table>
+  <thead>
+    <tr>
+      <th><code class="language-plaintext highlighter-rouge">tidb_build_stats_concurrency</code></th>
+      <th><code class="language-plaintext highlighter-rouge">tidb_analyze_partition_concurrency</code></th>
+      <th><code class="language-plaintext highlighter-rouge">analyze table</code> Time</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>2</td>
+      <td>2</td>
+      <td>6 min 8.61 sec</td>
+    </tr>
+    <tr>
+      <td>15</td>
+      <td>2</td>
+      <td>2 min 55.71 sec</td>
+    </tr>
+    <tr>
+      <td>2</td>
+      <td>15</td>
+      <td>6 min 4.41 sec</td>
+    </tr>
+    <tr>
+      <td>15</td>
+      <td>15</td>
+      <td>2 min 26.63 sec</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>The benchmark results clearly show that <code class="language-plaintext highlighter-rouge">tidb_build_stats_concurrency</code> has a much larger impact on overall execution time than <code class="language-plaintext highlighter-rouge">tidb_analyze_partition_concurrency</code>.</p>
+
+<p>This makes sense given the small partition sizes (300k rows per partition) - analyzing each partition completes quickly and generates minimal statistics data to save. As a result, the parallel statistics saving controlled by <code class="language-plaintext highlighter-rouge">tidb_analyze_partition_concurrency</code> isn’t a performance bottleneck, explaining its minimal impact on total execution time.</p>
+
+<p>The following sections will prove this point by showing the <code class="language-plaintext highlighter-rouge">analyze_jobs</code> table.</p>
+
+<h2 id="analysis">Analysis</h2>
+
+<p>Before we dive into the details, let’s first take a look at the analysis model of TiDB.</p>
+
+<h3 id="collection-phase">Collection Phase</h3>
+
+<p><img src="https://www.plantuml.com/plantuml/svg/jPAnRi8m48PtFyM97LLbP420XDIHhGlBuHp4mh6ZktCfVVh69844PUdG2N7-y_tVMLwB8ckgl9bj0lhR3y7UOu1jShuWdW4ARFPRcA_opnAEUGu8s8Nh7CPGW6L29L2KYy0Xd283eIsRmT7JMusiJbqCfeCzsdRVP9F6hcct1D7815hIgCDiTZ3l9IHPIoB6d3cc6cmCDZ5JK7_hFsfxvLaiTyAgF_-CV25-ptN8EggxjaVthGxXYauXR_ECj5kQCMcA_OYNz7eF3JdpXK8n8ZD9yerFpDF-doqn1F9J6oo66rpRqT_C5rFC_p5lXn_DvvvuADwbo_Paol-5Do9De9aikI-Q4cprKrsWKbPG9-giP76vYLBLFPtEEJ_9XmbwtrtoFNzomKbfA1I3S4Ly9ZZxU4G_vBiJ1AA21ja92uks9BEcKAJA_m80" alt="analyze_plan_builder" /></p>
+
+<p>Here’s how TiDB’s analyze workflow works:</p>
+
+<ol>
+  <li>The Analyze Plan Builder splits the work into tasks by table/partition</li>
+  <li>Multiple analyze workers run these tasks in parallel</li>
+  <li>Each worker:
+    <ul>
+      <li>Processes its assigned data independently</li>
+      <li>Streams results back to a central handler</li>
+      <li>Updates system tables with statistics as it goes</li>
+    </ul>
+  </li>
+  <li>After all workers finish:
+    <ul>
+      <li>Global statistics are merged if needed</li>
+      <li>The statistics cache gets refreshed</li>
+    </ul>
+  </li>
+</ol>
+
+<p>This parallel architecture enables efficient and reliable statistics collection across the TiDB cluster. The <code class="language-plaintext highlighter-rouge">tidb_build_stats_concurrency</code> parameter plays a crucial role here by determining how many analyze workers can run simultaneously, directly impacting the throughput of partition processing.</p>
+
+<h3 id="persistence-phase">Persistence Phase</h3>
+
+<p><img src="https://www.plantuml.com/plantuml/svg/bSunJmCn30NWFR_YwNQ6Pko0oe34p0rTM4ngk5Dp3h8TgkFN4rrG1wHAi7XvzlDtC2VrkkGGXcUscls9v9HP1v3XuH5tzstkSQ7PyLOK99JNBuPkonRUjTGFf2Afgh9uNc7qoMYzFflFoK9l6KOdDumjnB7ecNMt_HYFkpqs1NpYVdpfEHe5BtBzVSsTx8mqaGZdq0fQV-_fwSI_cF3IZrTpNk3qclcsA_wuuWrN_AihTbVyfulb50vjr2L_0m00" alt="analyze_persistence" /></p>
+
+<p>Once data collection completes, TiDB enters the persistence phase. During this phase, the system writes the collected statistics to some system tables: <code class="language-plaintext highlighter-rouge">mysql.stats_meta</code>, <code class="language-plaintext highlighter-rouge">mysql.stats_buckets</code>, etc. The <code class="language-plaintext highlighter-rouge">tidb_analyze_partition_concurrency</code> parameter determines how many concurrent workers handle these write operations.</p>
+
+<p>These parameters have different but related roles. The system follows a producer-consumer pattern, with <code class="language-plaintext highlighter-rouge">tidb_build_stats_concurrency</code> as the producer controlling statistics collection, and <code class="language-plaintext highlighter-rouge">tidb_analyze_partition_concurrency</code> as the consumer managing persistence. This design means their relative impact on performance can vary significantly depending on the specific workload characteristics.</p>
+
+<p>Now that we understand both phases, let’s dive into the execution details of the <code class="language-plaintext highlighter-rouge">analyze table</code> command to see how it works in practice.</p>
+
+<p>TiDB records the execution details of the <code class="language-plaintext highlighter-rouge">analyze table</code> command in the <code class="language-plaintext highlighter-rouge">mysql.analyze_jobs</code> table. The following is an example of the <code class="language-plaintext highlighter-rouge">analyze_jobs</code> table:</p>
+
+<div class="language-sql highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">SELECT</span> <span class="n">table_schema</span><span class="p">,</span>
+       <span class="k">table_name</span><span class="p">,</span>
+       <span class="n">partition_name</span><span class="p">,</span>
+       <span class="n">job_info</span><span class="p">,</span>
+       <span class="n">processed_rows</span><span class="p">,</span>
+       <span class="n">start_time</span><span class="p">,</span>
+       <span class="n">end_time</span><span class="p">,</span>
+       <span class="k">state</span>
+<span class="k">FROM</span> <span class="n">mysql</span><span class="p">.</span><span class="n">analyze_jobs</span>
+<span class="k">LIMIT</span> <span class="mi">3</span><span class="p">;</span>
+
+<span class="o">+</span><span class="c1">------------+----------+--------------+-------------------------------------------------------------------------------------------------------------+--------------+-------------------+-------------------+--------+</span>
+<span class="o">|</span><span class="n">table_schema</span><span class="o">|</span><span class="k">table_name</span><span class="o">|</span><span class="n">partition_name</span><span class="o">|</span><span class="n">job_info</span>                                                                                                     <span class="o">|</span><span class="n">processed_rows</span><span class="o">|</span><span class="n">start_time</span>         <span class="o">|</span><span class="n">end_time</span>           <span class="o">|</span><span class="k">state</span>   <span class="o">|</span>
+<span class="o">+</span><span class="c1">------------+----------+--------------+-------------------------------------------------------------------------------------------------------------+--------------+-------------------+-------------------+--------+</span>
+<span class="o">|</span><span class="n">test</span>        <span class="o">|</span><span class="n">test_table</span><span class="o">|</span><span class="n">p18</span>           <span class="o">|</span><span class="n">auto</span> <span class="k">analyze</span> <span class="k">table</span> <span class="k">all</span> <span class="n">indexes</span><span class="p">,</span> <span class="n">columns</span> <span class="n">id</span><span class="p">,</span> <span class="n">part_id</span> <span class="k">with</span> <span class="mi">256</span> <span class="n">buckets</span><span class="p">,</span> <span class="mi">100</span> <span class="n">topn</span><span class="p">,</span> <span class="mi">1</span> <span class="n">samplerate</span>                 <span class="o">|</span><span class="mi">413000</span>        <span class="o">|</span><span class="mi">2024</span><span class="o">-</span><span class="mi">11</span><span class="o">-</span><span class="mi">18</span> <span class="mi">15</span><span class="p">:</span><span class="mi">53</span><span class="p">:</span><span class="mi">04</span><span class="o">|</span><span class="mi">2024</span><span class="o">-</span><span class="mi">11</span><span class="o">-</span><span class="mi">18</span> <span class="mi">15</span><span class="p">:</span><span class="mi">53</span><span class="p">:</span><span class="mi">05</span><span class="o">|</span><span class="n">finished</span><span class="o">|</span>
+<span class="o">|</span><span class="n">test</span>        <span class="o">|</span><span class="n">test_table</span><span class="o">|</span><span class="n">p6</span>            <span class="o">|</span><span class="n">auto</span> <span class="k">analyze</span> <span class="k">table</span> <span class="k">all</span> <span class="n">indexes</span><span class="p">,</span> <span class="n">columns</span> <span class="n">id</span><span class="p">,</span> <span class="n">part_id</span> <span class="k">with</span> <span class="mi">256</span> <span class="n">buckets</span><span class="p">,</span> <span class="mi">100</span> <span class="n">topn</span><span class="p">,</span> <span class="mi">0</span><span class="p">.</span><span class="mi">2722772277227723</span> <span class="n">samplerate</span><span class="o">|</span><span class="mi">425000</span>        <span class="o">|</span><span class="mi">2024</span><span class="o">-</span><span class="mi">11</span><span class="o">-</span><span class="mi">18</span> <span class="mi">15</span><span class="p">:</span><span class="mi">53</span><span class="p">:</span><span class="mi">05</span><span class="o">|</span><span class="mi">2024</span><span class="o">-</span><span class="mi">11</span><span class="o">-</span><span class="mi">18</span> <span class="mi">15</span><span class="p">:</span><span class="mi">53</span><span class="p">:</span><span class="mi">06</span><span class="o">|</span><span class="n">finished</span><span class="o">|</span>
+<span class="o">|</span><span class="n">test</span>        <span class="o">|</span><span class="n">test_table</span><span class="o">|</span><span class="n">p0</span>            <span class="o">|</span><span class="n">auto</span> <span class="k">analyze</span> <span class="k">table</span> <span class="k">all</span> <span class="n">indexes</span><span class="p">,</span> <span class="n">columns</span> <span class="n">id</span><span class="p">,</span> <span class="n">part_id</span> <span class="k">with</span> <span class="mi">256</span> <span class="n">buckets</span><span class="p">,</span> <span class="mi">100</span> <span class="n">topn</span><span class="p">,</span> <span class="mi">0</span><span class="p">.</span><span class="mi">2736318407960199</span> <span class="n">samplerate</span><span class="o">|</span><span class="mi">434000</span>        <span class="o">|</span><span class="mi">2024</span><span class="o">-</span><span class="mi">11</span><span class="o">-</span><span class="mi">18</span> <span class="mi">15</span><span class="p">:</span><span class="mi">53</span><span class="p">:</span><span class="mi">05</span><span class="o">|</span><span class="mi">2024</span><span class="o">-</span><span class="mi">11</span><span class="o">-</span><span class="mi">18</span> <span class="mi">15</span><span class="p">:</span><span class="mi">53</span><span class="p">:</span><span class="mi">06</span><span class="o">|</span><span class="n">finished</span><span class="o">|</span>
+<span class="o">+</span><span class="c1">------------+----------+--------------+-------------------------------------------------------------------------------------------------------------+--------------+-------------------+-------------------+--------+</span>
+
+</code></pre></div></div>
+
+<p>Let’s analyze the overall timeline from when statistics collection begins to when the data is persisted to storage. This will give us insight into both the collection and persistence phases of the operation.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th><code class="language-plaintext highlighter-rouge">tidb_build_stats_concurrency</code></th>
+      <th><code class="language-plaintext highlighter-rouge">tidb_analyze_partition_concurrency</code></th>
+      <th>partition</th>
+      <th>Start Time</th>
+      <th>End Time</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>2</td>
+      <td>2</td>
+      <td>p18</td>
+      <td>2024-11-22 11:31:27</td>
+      <td>2024-11-22 11:31:36</td>
+    </tr>
+    <tr>
+      <td>15</td>
+      <td>2</td>
+      <td>p18</td>
+      <td>2024-11-22 12:37:35</td>
+      <td>2024-11-22 12:38:14</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>Examining the <code class="language-plaintext highlighter-rouge">start_time</code> and <code class="language-plaintext highlighter-rouge">end_time</code> columns reveals that individual partition processing times remain consistent across different parameter configurations, with all partitions completing within a 10-second window. This consistent timing indicates that the overall performance differences we observed cannot be explained by variations in how long it takes to process each partition.</p>
+
+<p>However, examining the number of concurrent partition operations reveals that <code class="language-plaintext highlighter-rouge">tidb_build_stats_concurrency</code> directly controls the degree of parallelism in partition processing.</p>
+
+<div class="language-sql highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">SELECT</span> <span class="k">COUNT</span><span class="p">(</span><span class="o">*</span><span class="p">)</span> <span class="k">AS</span> <span class="n">record_count</span>
+<span class="k">FROM</span> <span class="n">mysql</span><span class="p">.</span><span class="n">analyze_jobs</span>
+<span class="k">WHERE</span> <span class="n">start_time</span> <span class="k">BETWEEN</span> <span class="s1">'2024-11-22 11:31:00'</span> <span class="k">AND</span> <span class="s1">'2024-11-22 11:31:59'</span><span class="p">;</span>
+</code></pre></div></div>
+
+<table>
+  <thead>
+    <tr>
+      <th><code class="language-plaintext highlighter-rouge">tidb_build_stats_concurrency</code></th>
+      <th><code class="language-plaintext highlighter-rouge">tidb_analyze_partition_concurrency</code></th>
+      <th>record_count</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>2</td>
+      <td>2</td>
+      <td>20</td>
+    </tr>
+    <tr>
+      <td>15</td>
+      <td>2</td>
+      <td>29</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>The analysis reveals that increasing <code class="language-plaintext highlighter-rouge">tidb_build_stats_concurrency</code> enables more partitions to be processed concurrently. Since statistics persistence is not a performance bottleneck, this higher degree of partition-level parallelism directly translates to faster overall statistics collection.</p>
+
+<p>This finding explains the significant performance impact of <code class="language-plaintext highlighter-rouge">tidb_build_stats_concurrency</code> compared to the relatively minor effect of <code class="language-plaintext highlighter-rouge">tidb_analyze_partition_concurrency</code>.</p>
+
+<h2 id="large-partition-table">Large Partition Table</h2>
+
+<p>I also tested the <code class="language-plaintext highlighter-rouge">analyze table</code> command on a partitioned table containing 100 partitions and 2 billion rows. The results are as follows:</p>
+
+<blockquote>
+  <p><strong>Note:</strong> Test environment: 3 TiKV nodes and 3 TiDB nodes, each with 16 cores and 32GB RAM. Same as the previous test.</p>
+</blockquote>
+
+<table>
+  <thead>
+    <tr>
+      <th><code class="language-plaintext highlighter-rouge">tidb_build_stats_concurrency</code></th>
+      <th><code class="language-plaintext highlighter-rouge">tidb_analyze_partition_concurrency</code></th>
+      <th><code class="language-plaintext highlighter-rouge">analyze table</code> Time</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>2</td>
+      <td>2</td>
+      <td>25 min 39.67 sec</td>
+    </tr>
+    <tr>
+      <td>15</td>
+      <td>2</td>
+      <td>10 min 58.74 sec</td>
+    </tr>
+    <tr>
+      <td>2</td>
+      <td>15</td>
+      <td>24 min 15.95 sec</td>
+    </tr>
+    <tr>
+      <td>15</td>
+      <td>15</td>
+      <td>9 min 4.36 sec</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>The results from this large-scale test validate our earlier findings - increasing <code class="language-plaintext highlighter-rouge">tidb_build_stats_concurrency</code> provides significant performance improvements, while <code class="language-plaintext highlighter-rouge">tidb_analyze_partition_concurrency</code> has a relatively minor impact on overall execution time.</p>
+
+<p>While our initial findings suggest that <code class="language-plaintext highlighter-rouge">tidb_build_stats_concurrency</code> is the dominant factor in performance optimization, let’s examine a different scenario to validate this hypothesis.</p>
+
+<h2 id="wide-table">Wide Table</h2>
+
+<p>I tested the <code class="language-plaintext highlighter-rouge">analyze table</code> command on a wide table containing 500 partitions and 200 columns and 3 million rows. Here are the results:</p>
+
+<table>
+  <thead>
+    <tr>
+      <th><code class="language-plaintext highlighter-rouge">tidb_build_stats_concurrency</code></th>
+      <th><code class="language-plaintext highlighter-rouge">tidb_analyze_partition_concurrency</code></th>
+      <th><code class="language-plaintext highlighter-rouge">analyze table</code> Time</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>2</td>
+      <td>2</td>
+      <td>1 hour 17 min 57.55 sec</td>
+    </tr>
+    <tr>
+      <td>15</td>
+      <td>2</td>
+      <td>1 hour 15 min 30.46 sec</td>
+    </tr>
+    <tr>
+      <td>2</td>
+      <td>15</td>
+      <td>34 min 31.38 sec</td>
+    </tr>
+    <tr>
+      <td>15</td>
+      <td>15</td>
+      <td>34 min 56.99 sec</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>The execution time is influenced by both parameters, with <code class="language-plaintext highlighter-rouge">tidb_analyze_partition_concurrency</code> having a more significant impact compared to the small partition table test. This is because the increased number of columns creates a bottleneck during the statistics persistence phase.</p>
+
+<p>These settings are hard to tune correctly. Optimal configuration requires deep understanding of both the collection and persistence phases for your specific workload. Additionally, since these parameters are cluster-wide settings rather than table-specific, finding ideal values that work well across different table schemas becomes challenging.</p>
+
+<h2 id="conclusion">Conclusion</h2>
+
+<p>From our tests, we can see that adjusting these two parameters is actually quite challenging. While <code class="language-plaintext highlighter-rouge">tidb_build_stats_concurrency</code> dominates performance for partitioned tables, our wide table test shows that <code class="language-plaintext highlighter-rouge">tidb_analyze_partition_concurrency</code> can have a more significant impact in certain scenarios. To simplify configuration, I recommend merging these parameters. Since <code class="language-plaintext highlighter-rouge">tidb_analyze_partition_concurrency</code> better describes the overall functionality of controlling parallelism during statistics collection, we should keep this parameter and deprecate <code class="language-plaintext highlighter-rouge">tidb_build_stats_concurrency</code>. This will make tuning more straightforward while still providing the necessary control over concurrency for different table types.</p>
+
+
+    <p class="signature">&mdash; Rustin</p>
+  </div>
+  <script>
+    (function () {
+      anchors.options.placement = 'right';
+      anchors.add('.content > h3, .content > h4, .content > h5, .content > h6');
+    })();
+  </script>
+  <script src="https://giscus.app/client.js" data-repo="Rustin170506/blog"
+    data-repo-id="MDEwOlJlcG9zaXRvcnkyMTU4MDI0NDg=" data-category="Ideas" data-category-id="DIC_kwDODNziUM4CY_bg"
+    data-mapping="title" data-strict="0" data-reactions-enabled="1" data-emit-metadata="0" data-input-position="top"
+    data-theme="light" data-lang="en" data-loading="lazy" crossorigin="anonymous" async>
+    </script>
+</body>
+
+</html>

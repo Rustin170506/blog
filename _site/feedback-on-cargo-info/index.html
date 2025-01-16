@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Feedback on `cargo-info` to prepare it for merging - Rustin</title>
+  <link rel="stylesheet" href="https://netdna.bootstrapcdn.com/bootstrap/3.1.1/css/bootstrap.min.css" type="text/css">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Merriweather+Sans:400,300,700" type="text/css">
+  <link rel="stylesheet" href="/static/app.css" type="text/css">
+  <link rel="stylesheet" href="/static/syntax.css" type="text/css">
+  <link type="application/atom+xml" rel="alternate" href="http://localhost:4000/feed.xml" />
+  <meta name="theme-color" content="#111111">
+
+  <meta name="og:type" content="article">
+  <meta name="og:title" content="Feedback on `cargo-info` to prepare it for merging – Rustin">
+  <meta name="og:description" content="">
+  <meta name="og:site_name" content="Rustin">
+  <meta name="og:url" content="http://localhost:4000/feedback-on-cargo-info/">
+  
+  <meta name="og:image" content="http://localhost:4000/static/default_image.jpg">
+  
+  <meta property="article:published_time" content=" 2024-02-01">
+
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:site" content="@hi_rustin">
+  <meta name="twitter:domain" content="rustin.me">
+  <meta name="twitter:title" content="Feedback on `cargo-info` to prepare it for merging – Rustin">
+  <meta name="twitter:description" content="">
+  
+  <meta name="twitter:image" content="http://localhost:4000/static/default_image.jpg">
+  
+  <meta name="twitter:url" content="http://localhost:4000/feedback-on-cargo-info/">
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/anchor-js/3.2.0/anchor.min.js"></script>
+</head>
+
+<body>
+  <header>
+    <h1><a href="/">Rustin</a></h1>
+    <span>I’m a passionate software engineer who specializes in distributed systems and dev tools.</span>
+  </header>
+
+  <div class="content post">
+    <h2>Feedback on `cargo-info` to prepare it for merging</h2>
+    <p class="date">01 February 2024</p>
+
+    <h1 id="reminder">Reminder</h1>
+
+<p>I am working on merging the <code class="language-plaintext highlighter-rouge">cargo-info</code> subcommand into Cargo. There are a few points that need to be addressed before merging. I would like to get feedback on these points.
+You can find the key points of concern at the end of this post.</p>
+
+<h1 id="background">Background</h1>
+
+<p>This adds a new subcommand to Cargo, <code class="language-plaintext highlighter-rouge">cargo info</code>. This subcommand would allow users to get information about a crate from the command line, without having to go to the web.</p>
+
+<p>The main motivation for this is to make it easier to get information about a crate from the command line. Currently, the way to get information about a crate is to go to the web and look it up on <a href="https://crates.io">crates.io</a> or find the crate’s source code and look at the <code class="language-plaintext highlighter-rouge">Cargo.toml</code> file. This is not very convenient, especially not all information is displayed on the <a href="https://crates.io">crates.io</a> page.
+This command also has been requested by the community for a long time. You can find more discussion about this in <a href="https://github.com/rust-lang/cargo/issues/948">cargo#948</a>.</p>
+
+<p>Another motivation is to make the workflow of finding and evaluating crates more efficient. In the current workflow, users can search for crates using <code class="language-plaintext highlighter-rouge">cargo search</code>, but then they have to go to the web to get more information about the crate. This is not very efficient, especially if the user is just trying to get a quick overview of the crate. This would allow users to quickly get information about a crate without having to leave the terminal.</p>
+
+<p>Example usage:</p>
+
+<div class="language-console highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="gp">$</span><span class="w"> </span>cargo info clap
+<span class="go">    Updating crates.io index
+</span><span class="gp">clap #</span>argument <span class="c">#cli #arg #parser #parse</span>
+<span class="go">A simple to use, efficient, and full-featured Command Line Argument Parser
+version: 4.4.18
+license: MIT OR Apache-2.0
+rust-version: 1.70.0
+documentation: https://docs.rs/clap/4.4.18
+repository: https://github.com/clap-rs/clap
+features:
+  default         = [std, color, help, usage, error-context, suggestions]
+  std             = [clap_builder/std]
+  color           = [clap_builder/color]
+  help            = [clap_builder/help]
+  usage           = [clap_builder/usage]
+  error-context   = [clap_builder/error-context]
+  suggestions     = [clap_builder/suggestions]
+  cargo           = [clap_builder/cargo]
+  debug           = [clap_builder/debug, clap_derive?/debug]
+  deprecated      = [clap_builder/deprecated, clap_derive?/deprecated]
+  derive          = [dep:clap_derive]
+  env             = [clap_builder/env]
+  string          = [clap_builder/string]
+  unicode         = [clap_builder/unicode]
+  unstable-doc    = [clap_builder/unstable-doc, derive]
+  unstable-styles = [clap_builder/unstable-styles]
+  unstable-v5     = [clap_builder/unstable-v5, clap_derive?/unstable-v5, deprecated]
+  wrap_help       = [clap_builder/wrap_help]
+dependencies:
+  clap_builder@=4.4.18
+  clap_derive@=4.4.7
+owners:
+  kbknapp (Kevin K.)
+  github:rust-cli:maintainers (Maintainers)
+  github:clap-rs:admins (Admins)
+</span></code></pre></div></div>
+
+<h2 id="detailed-design">Detailed design</h2>
+
+<table>
+  <thead>
+    <tr>
+      <th>Content</th>
+      <th>Explanation</th>
+      <th>Why</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>clap</td>
+      <td>Name</td>
+      <td>The basic information.</td>
+    </tr>
+    <tr>
+      <td>#argument #cli #arg #parser #parse</td>
+      <td>Keywords</td>
+      <td>It’s more like a category, which you can use to search for relevant alternatives.</td>
+    </tr>
+    <tr>
+      <td>A simple to use, efficient, and full-featured Command Line Argument Parser</td>
+      <td>Description</td>
+      <td>The basic information.</td>
+    </tr>
+    <tr>
+      <td>version: 4.4.18</td>
+      <td>Version</td>
+      <td>The basic information.</td>
+    </tr>
+    <tr>
+      <td>license: MIT OR Apache-2.0</td>
+      <td>License</td>
+      <td>When choosing a crate, it is crucial to consider the license.</td>
+    </tr>
+    <tr>
+      <td>rust-version: 1.70.0</td>
+      <td>MSRV</td>
+      <td>When choosing a crate, it is crucial to make sure it can work with your MSRV.</td>
+    </tr>
+    <tr>
+      <td>documentation: <a href="https://docs.rs/clap/4.4.18">https://docs.rs/clap/4.4.18</a></td>
+      <td>Documentation Link</td>
+      <td>Use these links can find more docs and information.</td>
+    </tr>
+    <tr>
+      <td>repository: <a href="https://github.com/clap-rs/clap">https://github.com/clap-rs/clap</a></td>
+      <td>Repo Link</td>
+      <td>Use these links can find more docs and information.</td>
+    </tr>
+    <tr>
+      <td>features:</td>
+      <td>Default Features And Other Features</td>
+      <td>It helps for enabling features.</td>
+    </tr>
+    <tr>
+      <td>dependencies:</td>
+      <td>All dependencies</td>
+      <td>It indicates what it depends on.</td>
+    </tr>
+    <tr>
+      <td>owners:</td>
+      <td>Owners</td>
+      <td>It indicates who maintains the crate.</td>
+    </tr>
+  </tbody>
+</table>
+
+<h1 id="some-important-notes">Some important notes</h1>
+
+<h2 id="downloading-the-crate-from-any-cargo-compatible-registry">Downloading the crate from any Cargo compatible registry</h2>
+
+<p>The <code class="language-plaintext highlighter-rouge">cargo info</code> command will download the crate from any Cargo compatible registry. It will then extract the information from the <code class="language-plaintext highlighter-rouge">Cargo.toml</code> file and display it in the terminal.</p>
+
+<p>If the crate is already in the local cache, it will not download the crate again. It will get the information from the local cache.</p>
+
+<h2 id="pick-the-correct-version-from-the-workspace">Pick the correct version from the workspace</h2>
+
+<p>When executed in a workspace directory, the cargo info command chooses the version that the workspace is currently using.</p>
+
+<p>If there’s a lock file available, the version from this file will be used. In the absence of a lock file, the command attempts to select a version that is compatible with the Minimum Supported Rust Version (MSRV). And the lock file will be generated automatically.</p>
+
+<p>The following hierarchy is used to determine the MSRV:</p>
+
+<ul>
+  <li>First, the MSRV of the parent directory package is checked, if it exists.</li>
+  <li>If the parent directory package does not specify an MSRV, the minimal MSRV of the workspace is checked.</li>
+  <li>If neither the workspace nor the parent directory package specify an MSRV, the version of the current Rust compiler (rustc –version) is used.</li>
+</ul>
+
+<h1 id="prior-art">Prior art</h1>
+
+<h2 id="npm">NPM</h2>
+
+<p><a href="https://www.npmjs.com/">npm</a> has a similar command called <code class="language-plaintext highlighter-rouge">npm info</code>.
+For example:</p>
+
+<div class="language-console highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="gp">$</span><span class="w"> </span>npm info lodash
+<span class="go">
+lodash@4.17.21 | MIT | deps: none | versions: 114
+Lodash modular utilities.
+https://lodash.com/
+
+keywords: modules, stdlib, util
+
+dist
+.tarball: https://registry.npmjs.org/lodash/-/lodash-4.17.21.tgz
+.shasum: 679591c564c3bffaae8454cf0b3df370c3d6911c
+.integrity: sha512-v2kDEe57lecTulaDIuNTPy3Ry4gLGJ6Z1O3vE1krgXZNrsQ+LFTGHVxVjcXPs17LhbZVGedAJv8XZ1tvj5FvSg==
+.unpackedSize: 1.4 MB
+
+maintainers:
+</span><span class="gp">- mathias &lt;mathias@qiwi.be&gt;</span><span class="w">
+</span><span class="gp">- jdalton &lt;john.david.dalton@gmail.com&gt;</span><span class="w">
+</span><span class="gp">- bnjmnt4n &lt;benjamin@dev.ofcr.se&gt;</span><span class="w">
+</span><span class="go">
+dist-tags:
+latest: 4.17.21
+
+</span><span class="gp">published over a year ago by bnjmnt4n &lt;benjamin@dev.ofcr.se&gt;</span><span class="w">
+</span></code></pre></div></div>
+
+<h2 id="poetry">Poetry</h2>
+
+<p><a href="https://python-poetry.org/">Poetry</a> has a similar command called <code class="language-plaintext highlighter-rouge">poetry show</code>.</p>
+
+<p>For example:</p>
+
+<div class="language-console highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="gp">$</span><span class="w"> </span>poetry show pendulum
+<span class="go">
+name        : pendulum
+version     : 1.4.2
+description : Python datetimes made easy
+
+dependencies
+</span><span class="gp"> - python-dateutil &gt;</span><span class="o">=</span>2.6.1
+<span class="gp"> - tzlocal &gt;</span><span class="o">=</span>1.4
+<span class="gp"> - pytzdata &gt;</span><span class="o">=</span>2017.2.2
+<span class="go">
+required by
+</span><span class="gp"> - calendar &gt;</span><span class="o">=</span>1.4.0
+</code></pre></div></div>
+
+<h1 id="known-points-of-concern">Known Points of Concern</h1>
+
+<ol>
+  <li>
+    <p>Report crates metrics? <a href="https://github.com/Rustin170506/cargo-information/issues/20">cargo-information#20</a></p>
+
+    <p>Proposal:</p>
+
+    <ul>
+      <li>recent download count (popularity)</li>
+      <li>last updated (give a feel for how active development is)</li>
+      <li>Only for crates.io.</li>
+    </ul>
+  </li>
+  <li>
+    <p>What dependency fields might be relevant to indicate? <a href="https://github.com/Rustin170506/cargo-information/issues/23">cargo-information#23</a></p>
+
+    <p>Proposal:</p>
+
+    <ul>
+      <li>From @epage: Dependencies are mostly an implementation detail (except public) but people sometimes care, so I figure that holding off on private dependencies to –verbose might buy us more space.</li>
+      <li>From @Rustin170506: How about we show all the dependencies and only show the dev-dependencies and build-dependencies for a –verbose. I guess checking its dependencies before you use it in your project would always be considered.</li>
+    </ul>
+  </li>
+  <li>
+    <p>How should we render features? <a href="https://github.com/Rustin170506/cargo-information/issues/26">cargo-information#26</a></p>
+
+    <p>Proposal: Currently, it’s a simple list of features and their dependencies. We could consider a tree view:</p>
+
+    <div class="language-console highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="go"> features:
+   parent1
+     child1
+   parent2
+     child1*
+</span></code></pre></div>    </div>
+  </li>
+  <li>
+    <p>What version should we default to within a workspace? What if it isn’t the direct dependency but is a transitive dependency? <a href="https://github.com/Rustin170506/cargo-information/issues/29">cargo-information#29</a></p>
+  </li>
+</ol>
+
+
+
+    <p class="signature">&mdash; Rustin</p>
+  </div>
+  <script>
+    (function () {
+      anchors.options.placement = 'right';
+      anchors.add('.content > h3, .content > h4, .content > h5, .content > h6');
+    })();
+  </script>
+  <script src="https://giscus.app/client.js" data-repo="Rustin170506/blog"
+    data-repo-id="MDEwOlJlcG9zaXRvcnkyMTU4MDI0NDg=" data-category="Ideas" data-category-id="DIC_kwDODNziUM4CY_bg"
+    data-mapping="title" data-strict="0" data-reactions-enabled="1" data-emit-metadata="0" data-input-position="top"
+    data-theme="light" data-lang="en" data-loading="lazy" crossorigin="anonymous" async>
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>解决 macOS 10.15 Catalina 无法运行 qmeu 的问题 - Rustin</title>
+  <link rel="stylesheet" href="https://netdna.bootstrapcdn.com/bootstrap/3.1.1/css/bootstrap.min.css" type="text/css">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Merriweather+Sans:400,300,700" type="text/css">
+  <link rel="stylesheet" href="/static/app.css" type="text/css">
+  <link rel="stylesheet" href="/static/syntax.css" type="text/css">
+  <link type="application/atom+xml" rel="alternate" href="http://localhost:4000/feed.xml" />
+  <meta name="theme-color" content="#111111">
+
+  <meta name="og:type" content="article">
+  <meta name="og:title" content="解决 macOS 10.15 Catalina 无法运行 qmeu 的问题 – Rustin">
+  <meta name="og:description" content="">
+  <meta name="og:site_name" content="Rustin">
+  <meta name="og:url" content="http://localhost:4000/%E8%A7%A3%E5%86%B3Catalina%E6%97%A0%E6%B3%95%E8%BF%90%E8%A1%8Cqemu%E9%97%AE%E9%A2%98/">
+  
+  <meta name="og:image" content="http://localhost:4000/static/default_image.jpg">
+  
+  <meta property="article:published_time" content=" 2019-11-03">
+
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:site" content="@hi_rustin">
+  <meta name="twitter:domain" content="rustin.me">
+  <meta name="twitter:title" content="解决 macOS 10.15 Catalina 无法运行 qmeu 的问题 – Rustin">
+  <meta name="twitter:description" content="">
+  
+  <meta name="twitter:image" content="http://localhost:4000/static/default_image.jpg">
+  
+  <meta name="twitter:url" content="http://localhost:4000/%E8%A7%A3%E5%86%B3Catalina%E6%97%A0%E6%B3%95%E8%BF%90%E8%A1%8Cqemu%E9%97%AE%E9%A2%98/">
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/anchor-js/3.2.0/anchor.min.js"></script>
+</head>
+
+<body>
+  <header>
+    <h1><a href="/">Rustin</a></h1>
+    <span>I’m a passionate software engineer who specializes in distributed systems and dev tools.</span>
+  </header>
+
+  <div class="content post">
+    <h2>解决 macOS 10.15 Catalina 无法运行 qmeu 的问题</h2>
+    <p class="date">03 November 2019</p>
+
+    <p>最近在学习 Rust，并且在尝试使用 Rust 来做内核，跟着 <a href="https://os.phil-opp.com/" target="_blank">Writing an OS in Rust</a> 系列博客学习，这个博客质量非常高，深入浅出。</p>
+
+<p>但是最近遇到一个qemu的问题,当我将系统升级到最近的 macOS 10.15 Catalina 之后，qemu 无法运行，启动之后卡死。如下：
+<img src="../static/files/post-images/2019-11-03/qemu-crash.jpeg" alt="" height="360px" width="450px" /></p>
+
+<h3 id="解决方案">解决方案</h3>
+
+<p>实际上卡死的原因是 Catalina 操作系统底层 API 变化导致的死锁。该死锁会导致 qemu 的 UI Cocoa 无法正常工作。</p>
+
+<p>所以我们目前运行 qemu 的非 GUI 模式是正常的。</p>
+
+<p>后来我在 qemu 的论坛发现有人报告这个 bug，并且有人已经修复了这个问题，但是还没有 release。但是也有人给出了其他解决方案，可以通过自己编译切换 UI 来解决这个问题。</p>
+
+<h5 id="步骤如下我使用homebrew安装其他安装方式也一样重新编译就行">步骤如下（我使用homebrew安装，其他安装方式也一样，重新编译就行）：</h5>
+
+<ol>
+  <li><code class="language-plaintext highlighter-rouge">brew edit qemu</code></li>
+  <li>添加依赖：sdl2，<code class="language-plaintext highlighter-rouge">depends_on "sdl2"</code></li>
+  <li>关闭 cocoa，将<code class="language-plaintext highlighter-rouge">--enable-cocoa</code> 改为 <code class="language-plaintext highlighter-rouge">--disable-cocoa</code></li>
+  <li>打开 sdl，将<code class="language-plaintext highlighter-rouge">--disable-sdl</code> 改为 <code class="language-plaintext highlighter-rouge">--enable-sdl</code></li>
+  <li><code class="language-plaintext highlighter-rouge">brew reinstall --build-from-source qemu</code></li>
+</ol>
+
+<p>最终的 Formula 文件：</p>
+
+<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">class</span> <span class="nc">Qemu</span> <span class="o">&lt;</span> <span class="no">Formula</span>
+  <span class="n">desc</span> <span class="s2">"x86 and PowerPC Emulator"</span>
+  <span class="n">homepage</span> <span class="s2">"https://www.qemu.org/"</span>
+  <span class="n">url</span> <span class="s2">"https://download.qemu.org/qemu-4.1.0.tar.xz"</span>
+  <span class="n">sha256</span> <span class="s2">"656e60218689bdeec69903087fd7582d5d3e72238d02f4481d8dc6d79fd909c6"</span>
+  <span class="n">head</span> <span class="s2">"https://git.qemu.org/git/qemu.git"</span>
+
+  <span class="n">bottle</span> <span class="k">do</span>
+    <span class="n">sha256</span> <span class="s2">"b8e20707ff317f4182fbd180f033f4a9f163e40fec54a442d9b227e2f39846db"</span> <span class="o">=&gt;</span> <span class="ss">:catalina</span>
+    <span class="n">sha256</span> <span class="s2">"3b35079b1729b9b1bd58087794ccd9d40848b69d22a601c12b451791709298d6"</span> <span class="o">=&gt;</span> <span class="ss">:mojave</span>
+    <span class="n">sha256</span> <span class="s2">"0ef458cc2c387f8bbb2bdbd0e4d6e2a21574eb735c1621ad8e0cd3e094288298"</span> <span class="o">=&gt;</span> <span class="ss">:high_sierra</span>
+    <span class="n">sha256</span> <span class="s2">"68d05c70584e722c8109682ddc041a6271e0c36d102c7d3f55553ba3b4f39480"</span> <span class="o">=&gt;</span> <span class="ss">:sierra</span>
+  <span class="k">end</span>
+
+  <span class="n">depends_on</span> <span class="s2">"libtool"</span> <span class="o">=&gt;</span> <span class="ss">:build</span>
+  <span class="n">depends_on</span> <span class="s2">"pkg-config"</span> <span class="o">=&gt;</span> <span class="ss">:build</span>
+  <span class="n">depends_on</span> <span class="s2">"glib"</span>
+  <span class="n">depends_on</span> <span class="s2">"gnutls"</span>
+  <span class="n">depends_on</span> <span class="s2">"jpeg"</span>
+  <span class="n">depends_on</span> <span class="s2">"libpng"</span>
+  <span class="n">depends_on</span> <span class="s2">"libssh"</span>
+  <span class="n">depends_on</span> <span class="s2">"libusb"</span>
+  <span class="n">depends_on</span> <span class="s2">"lzo"</span>
+  <span class="n">depends_on</span> <span class="s2">"ncurses"</span>
+  <span class="n">depends_on</span> <span class="s2">"pixman"</span>
+  <span class="n">depends_on</span> <span class="s2">"vde"</span>
+  <span class="n">depends_on</span> <span class="s2">"sdl2"</span>
+
+  <span class="c1"># 820KB floppy disk image file of FreeDOS 1.2, used to test QEMU</span>
+  <span class="n">resource</span> <span class="s2">"test-image"</span> <span class="k">do</span>
+    <span class="n">url</span> <span class="s2">"https://dl.bintray.com/homebrew/mirror/FD12FLOPPY.zip"</span>
+    <span class="n">sha256</span> <span class="s2">"81237c7b42dc0ffc8b32a2f5734e3480a3f9a470c50c14a9c4576a2561a35807"</span>
+  <span class="k">end</span>
+
+  <span class="k">def</span> <span class="nf">install</span>
+    <span class="no">ENV</span><span class="p">[</span><span class="s2">"LIBTOOL"</span><span class="p">]</span> <span class="o">=</span> <span class="s2">"glibtool"</span>
+
+    <span class="n">args</span> <span class="o">=</span> <span class="sx">%W[
+      --prefix=</span><span class="si">#{</span><span class="n">prefix</span><span class="si">}</span><span class="sx">
+      --cc=</span><span class="si">#{</span><span class="no">ENV</span><span class="p">.</span><span class="nf">cc</span><span class="si">}</span><span class="sx">
+      --host-cc=</span><span class="si">#{</span><span class="no">ENV</span><span class="p">.</span><span class="nf">cc</span><span class="si">}</span><span class="sx">
+      --disable-bsd-user
+      --disable-guest-agent
+      --enable-curses
+      --enable-libssh
+      --enable-vde
+      --extra-cflags=-DNCURSES_WIDECHAR=1
+      --disable-cocoa
+      --enable-sdl
+      --disable-gtk
+    ]</span>
+    <span class="c1"># Sharing Samba directories in QEMU requires the samba.org smbd which is</span>
+    <span class="c1"># incompatible with the macOS-provided version. This will lead to</span>
+    <span class="c1"># silent runtime failures, so we set it to a Homebrew path in order to</span>
+    <span class="c1"># obtain sensible runtime errors. This will also be compatible with</span>
+    <span class="c1"># Samba installations from external taps.</span>
+    <span class="n">args</span> <span class="o">&lt;&lt;</span> <span class="s2">"--smbd=</span><span class="si">#{</span><span class="no">HOMEBREW_PREFIX</span><span class="si">}</span><span class="s2">/sbin/samba-dot-org-smbd"</span>
+
+    <span class="nb">system</span> <span class="s2">"./configure"</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span>
+    <span class="nb">system</span> <span class="s2">"make"</span><span class="p">,</span> <span class="s2">"V=1"</span><span class="p">,</span> <span class="s2">"install"</span>
+  <span class="k">end</span>
+
+  <span class="nb">test</span> <span class="k">do</span>
+    <span class="n">expected</span> <span class="o">=</span> <span class="n">build</span><span class="p">.</span><span class="nf">stable?</span> <span class="p">?</span> <span class="n">version</span><span class="p">.</span><span class="nf">to_s</span> <span class="p">:</span> <span class="s2">"QEMU Project"</span>
+    <span class="n">assert_match</span> <span class="n">expected</span><span class="p">,</span> <span class="n">shell_output</span><span class="p">(</span><span class="s2">"</span><span class="si">#{</span><span class="n">bin</span><span class="si">}</span><span class="s2">/qemu-system-i386 --version"</span><span class="p">)</span>
+    <span class="n">resource</span><span class="p">(</span><span class="s2">"test-image"</span><span class="p">).</span><span class="nf">stage</span> <span class="n">testpath</span>
+    <span class="n">assert_match</span> <span class="s2">"file format: raw"</span><span class="p">,</span> <span class="n">shell_output</span><span class="p">(</span><span class="s2">"</span><span class="si">#{</span><span class="n">bin</span><span class="si">}</span><span class="s2">/qemu-img info FLOPPY.img"</span><span class="p">)</span>
+  <span class="k">end</span>
+<span class="k">end</span>
+</code></pre></div></div>
+
+<p>重新编译安装之后，就不会出现死锁能正常工作了。</p>
+
+<p><img src="../static/files/post-images/2019-11-03/qemu-not-crash.png" alt="" height="360px" width="450px" /></p>
+
+<hr />
+
+<h3 id="参考链接">参考链接</h3>
+
+<ol>
+  <li><a href="https://bugs.launchpad.net/qemu/+bug/1847906" target="_blank">qemu 论坛关于 Catalina 无法运行的 bug 报告</a>.</li>
+  <li><a href="https://github.com/qemu/qemu/commit/dff742ad27efa474ec04accdbf422c9acfd3e30e" target="_blank">github 修复改 bug 的 commit</a>.</li>
+</ol>
+
+
+    <p class="signature">&mdash; Rustin</p>
+  </div>
+  <script>
+    (function () {
+      anchors.options.placement = 'right';
+      anchors.add('.content > h3, .content > h4, .content > h5, .content > h6');
+    })();
+  </script>
+  <script src="https://giscus.app/client.js" data-repo="Rustin170506/blog"
+    data-repo-id="MDEwOlJlcG9zaXRvcnkyMTU4MDI0NDg=" data-category="Ideas" data-category-id="DIC_kwDODNziUM4CY_bg"
+    data-mapping="title" data-strict="0" data-reactions-enabled="1" data-emit-metadata="0" data-input-position="top"
+    data-theme="light" data-lang="en" data-loading="lazy" crossorigin="anonymous" async>
+    </script>
+</body>
+
+</html>

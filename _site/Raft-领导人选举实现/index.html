@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Raft 领导人选举实现 - Rustin</title>
+  <link rel="stylesheet" href="https://netdna.bootstrapcdn.com/bootstrap/3.1.1/css/bootstrap.min.css" type="text/css">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Merriweather+Sans:400,300,700" type="text/css">
+  <link rel="stylesheet" href="/static/app.css" type="text/css">
+  <link rel="stylesheet" href="/static/syntax.css" type="text/css">
+  <link type="application/atom+xml" rel="alternate" href="http://localhost:4000/feed.xml" />
+  <meta name="theme-color" content="#111111">
+
+  <meta name="og:type" content="article">
+  <meta name="og:title" content="Raft 领导人选举实现 – Rustin">
+  <meta name="og:description" content="">
+  <meta name="og:site_name" content="Rustin">
+  <meta name="og:url" content="http://localhost:4000/Raft-%E9%A2%86%E5%AF%BC%E4%BA%BA%E9%80%89%E4%B8%BE%E5%AE%9E%E7%8E%B0/">
+  
+  <meta name="og:image" content="http://localhost:4000/static/default_image.jpg">
+  
+  <meta property="article:published_time" content=" 2020-04-12">
+
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:site" content="@hi_rustin">
+  <meta name="twitter:domain" content="rustin.me">
+  <meta name="twitter:title" content="Raft 领导人选举实现 – Rustin">
+  <meta name="twitter:description" content="">
+  
+  <meta name="twitter:image" content="http://localhost:4000/static/default_image.jpg">
+  
+  <meta name="twitter:url" content="http://localhost:4000/Raft-%E9%A2%86%E5%AF%BC%E4%BA%BA%E9%80%89%E4%B8%BE%E5%AE%9E%E7%8E%B0/">
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/anchor-js/3.2.0/anchor.min.js"></script>
+</head>
+
+<body>
+  <header>
+    <h1><a href="/">Rustin</a></h1>
+    <span>I’m a passionate software engineer who specializes in distributed systems and dev tools.</span>
+  </header>
+
+  <div class="content post">
+    <h2>Raft 领导人选举实现</h2>
+    <p class="date">12 April 2020</p>
+
+    <p>大家好，我是 <a href="https://github.com/Rustin170506">Rustin</a>。最近在做 6.824 的实验 lab2，今天想写一篇文章记录一下前段时间做的 Raft 领导人选举机制的实现。</p>
+
+<p>此博客在 <a href="https://github.com/Rustin170506/blog">GitHub</a> 上公开发布. 如果您有任何问题或疑问，请在此处打开一个 <a href="https://github.com/Rustin170506/blog/issues">issue</a>。</p>
+
+<h2 id="简介">简介</h2>
+
+<p><a href="http://nil.csail.mit.edu/6.824/2020/schedule.html">6.824</a> 是 MIT 的分布式系统公开课，今年还有官方的<a href="https://www.youtube.com/channel/UC_7WrbZTCODu1o_kfUMq88g">视频资料</a>放出。
+目前也有国内的同学正在进行<a href="https://github.com/ivanallen/thor">翻译工作</a>，可以参考一下。</p>
+
+<p>课程质量非常高，国内也有一些整理好的<a href="https://github.com/chaozh/MIT-6.824">相关资料</a>可以参考。</p>
+
+<p>下面我就简单描述一下 Raft 领导人选举机制实现过程和一些踩过的坑，我会尽可能的聚焦在实现实验的细节上，因为我可能对 Raft 目前的理解也比较浅显。<strong>所以如果您对这篇文章感兴趣，请您先阅读论文和观看课程视频并尝试实现。</strong></p>
+
+<h2 id="领导人选举规则分析">领导人选举规则分析</h2>
+
+<p>在 Raft 中分别有三种角色分别是：Leader, Follower 和 Candidate。在整个系统正常运行过程中，只会有一个 Leader 节点，其他的都是 Follower 节点。只有在需要重新选举的阶段，节点会尝试将自己转换为
+Candidate，然后向所有的节点发出投票 RPC 消息展开选举。</p>
+
+<p>我觉得而一个比较好的切入思路就是搞明白何时需要进行 Leader 的选举？我们阅读论文会发现主要有两种情况需要进行选举，<strong>一种就是当 Raft 集群启动之后开始第一次选举，另外一种就是 Leader 出现故障，无法使用心跳机制维持自己的统治，
+导致选举超时机制触发，节点开始尝试新的一轮的选举(需要注意的是，选举有可能在一个 Term 中没有结果，那么就在下个 Term 中继续选举直到选出 Leader)。</strong></p>
+
+<p>搞清楚何时进行选举，我们再来看看选举的 RPC 请求和回复的数据结构：</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>Request 参数</th>
+      <th>解释</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>term</td>
+      <td>候选人的任期号</td>
+    </tr>
+    <tr>
+      <td>candidateId</td>
+      <td>请求选票的候选人的 Id</td>
+    </tr>
+    <tr>
+      <td>lastLogIndex</td>
+      <td>候选人的最后日志条目的索引值</td>
+    </tr>
+    <tr>
+      <td>lastLogTerm</td>
+      <td>候选人最后日志条目的任期号</td>
+    </tr>
+  </tbody>
+</table>
+
+<p><br /></p>
+
+<table>
+  <thead>
+    <tr>
+      <th>Reply 返回值</th>
+      <th>解释</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>term</td>
+      <td>当前任期号，以便于候选人去更新自己的任期号</td>
+    </tr>
+    <tr>
+      <td>voteGranted</td>
+      <td>候选人赢得了此张选票时为真</td>
+    </tr>
+  </tbody>
+</table>
+
+<p><br /></p>
+
+<p><strong>从数据结构中我们可以看到能够影响到选举的主要有两个部分，一个是 Term，另外一个就是候选人的最后一条日志条目。那我们就尝试从这两点方面去消化和理解选举的规则：</strong></p>
+
+<ul>
+  <li>Term
+    <ul>
+      <li>候选人的 Term 必须大于投票者的 Term，否则就立马拒绝投票。</li>
+    </ul>
+  </li>
+  <li>候选人最后一条日志
+    <ul>
+      <li>候选人的最后一条日志的 Term 要大于投票者的最后一条日志的 Term（保证日志最新） 或者当它们的最后一条日志的 Term 相同时，候选人最后一条日志的 Index 要大于等于投票者（保证日志最长）。</li>
+    </ul>
+  </li>
+</ul>
+
+<p>主要的规则就是这两条，第一条还是很好理解的，我们不应该投票给 Term 落后的节点。日志这一条规则出自论文 5.4.1 领导选举限制，我们必须保证我们选出的领导拥有系统中绝大部分节点承认的最新最长的日志记录。
+所幸这个规则是为了保证日志的安全性，对我们实现实验的 A 部分还不影响。如果你对这条规则的设置很迷惑，可以先继续实验，等到做完日志复制部分实验之后，可能就会对这个规则有更深更清晰的理解。</p>
+
+<p>当我们成为领导人之后需要通过心跳机制来维持自己的统治，<strong>也就是不停的发空日志给 Follower，然后通过这种方式是刷新该 Follower 的选举超时时间，让它不要发起选举。</strong>所以在开始实验之前我们还需要简单看一下附加日志的 PRC
+请求和回复的数据结构：</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>参数</th>
+      <th>解释</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>term</td>
+      <td>领导人的任期号</td>
+    </tr>
+    <tr>
+      <td>leaderId</td>
+      <td>领导人的 Id，以便于跟随者重定向请求</td>
+    </tr>
+    <tr>
+      <td>prevLogIndex</td>
+      <td>新的日志条目紧随之前的索引值</td>
+    </tr>
+    <tr>
+      <td>prevLogTerm</td>
+      <td>prevLogIndex 条目的任期号</td>
+    </tr>
+    <tr>
+      <td>entries[]</td>
+      <td>准备存储的日志条目（表示心跳时为空；一次性发送多个是为了提高效率）</td>
+    </tr>
+    <tr>
+      <td>leaderCommit</td>
+      <td>领导人已经提交的日志的索引值</td>
+    </tr>
+  </tbody>
+</table>
+
+<p><br /></p>
+
+<table>
+  <thead>
+    <tr>
+      <th>返回值</th>
+      <th>解释</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>term</td>
+      <td>当前的任期号，用于领导人去更新自己</td>
+    </tr>
+    <tr>
+      <td>success</td>
+      <td>跟随者包含了匹配上 prevLogIndex 和 prevLogTerm 的日志时为真</td>
+    </tr>
+  </tbody>
+</table>
+
+<p><br /></p>
+
+<p><strong>这些数据结构的大多数字段都是为了附加日志设计的，所以我们可以尽量的屏蔽掉无用的字段，目前对实验 A 有影响的就只有 Term 字段，所以我们在接下来的实现中确保 Term 处理逻辑正确即可。</strong></p>
+
+<h2 id="测试用例分析">测试用例分析</h2>
+
+<p>在开始实现之前我们先来看看实验的测试用例。领导人实验实际上很简单，所有它的测试用例也很简单，主要有两个测试：</p>
+
+<ul>
+  <li>TestInitialElection2A: 简单测试是否可以完成正常的领导人选举</li>
+  <li>TestReElection2A: 测试当第一次选出的领导人故障之后，是否能正常选举出新的领导人。</li>
+</ul>
+
+<p>这些测试用例都很简单，其中测试用例用到一个函数：</p>
+<div class="language-go highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c">// 检查是否确实仅存在一个领导人。</span>
+<span class="c">// 为了测试重新选举，所以会多尝试几次查找。</span>
+<span class="k">func</span> <span class="p">(</span><span class="n">cfg</span> <span class="o">*</span><span class="n">config</span><span class="p">)</span> <span class="n">checkOneLeader</span><span class="p">()</span> <span class="kt">int</span> <span class="p">{</span>
+	<span class="c">// 多迭代几次尝试寻找领导人。</span>
+	<span class="k">for</span> <span class="n">iters</span> <span class="o">:=</span> <span class="m">0</span><span class="p">;</span> <span class="n">iters</span> <span class="o">&lt;</span> <span class="m">10</span><span class="p">;</span> <span class="n">iters</span><span class="o">++</span> <span class="p">{</span>
+		<span class="n">ms</span> <span class="o">:=</span> <span class="m">450</span> <span class="o">+</span> <span class="p">(</span><span class="n">rand</span><span class="o">.</span><span class="n">Int63</span><span class="p">()</span> <span class="o">%</span> <span class="m">100</span><span class="p">)</span>
+		<span class="c">// 随机尝试。</span>
+		<span class="n">time</span><span class="o">.</span><span class="n">Sleep</span><span class="p">(</span><span class="n">time</span><span class="o">.</span><span class="n">Duration</span><span class="p">(</span><span class="n">ms</span><span class="p">)</span> <span class="o">*</span> <span class="n">time</span><span class="o">.</span><span class="n">Millisecond</span><span class="p">)</span>
+		<span class="c">// 获取领导人和对应上任 Term。</span>
+		<span class="n">leaders</span> <span class="o">:=</span> <span class="nb">make</span><span class="p">(</span><span class="k">map</span><span class="p">[</span><span class="kt">int</span><span class="p">][]</span><span class="kt">int</span><span class="p">)</span>
+		<span class="k">for</span> <span class="n">i</span> <span class="o">:=</span> <span class="m">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">cfg</span><span class="o">.</span><span class="n">n</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span> <span class="p">{</span>
+			<span class="k">if</span> <span class="n">cfg</span><span class="o">.</span><span class="n">connected</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="p">{</span>
+				<span class="k">if</span> <span class="n">term</span><span class="p">,</span> <span class="n">leader</span> <span class="o">:=</span> <span class="n">cfg</span><span class="o">.</span><span class="n">rafts</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="o">.</span><span class="n">GetState</span><span class="p">();</span> <span class="n">leader</span> <span class="p">{</span>
+					<span class="n">leaders</span><span class="p">[</span><span class="n">term</span><span class="p">]</span> <span class="o">=</span> <span class="nb">append</span><span class="p">(</span><span class="n">leaders</span><span class="p">[</span><span class="n">term</span><span class="p">],</span> <span class="n">i</span><span class="p">)</span>
+				<span class="p">}</span>
+			<span class="p">}</span>
+		<span class="p">}</span>
+		<span class="c">// 校验没有在一个周期内选出两个领导人，找到最后新的Term。</span>
+		<span class="n">lastTermWithLeader</span> <span class="o">:=</span> <span class="o">-</span><span class="m">1</span>
+		<span class="k">for</span> <span class="n">term</span><span class="p">,</span> <span class="n">leaders</span> <span class="o">:=</span> <span class="k">range</span> <span class="n">leaders</span> <span class="p">{</span>
+			<span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">leaders</span><span class="p">)</span> <span class="o">&gt;</span> <span class="m">1</span> <span class="p">{</span>
+				<span class="n">cfg</span><span class="o">.</span><span class="n">t</span><span class="o">.</span><span class="n">Fatalf</span><span class="p">(</span><span class="s">"term %d has %d (&gt;1) leaders"</span><span class="p">,</span> <span class="n">term</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">leaders</span><span class="p">))</span>
+			<span class="p">}</span>
+			<span class="k">if</span> <span class="n">term</span> <span class="o">&gt;</span> <span class="n">lastTermWithLeader</span> <span class="p">{</span>
+				<span class="n">lastTermWithLeader</span> <span class="o">=</span> <span class="n">term</span>
+			<span class="p">}</span>
+		<span class="p">}</span>
+		<span class="c">// 找到最新的领导人。</span>
+		<span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">leaders</span><span class="p">)</span> <span class="o">!=</span> <span class="m">0</span> <span class="p">{</span>
+			<span class="k">return</span> <span class="n">leaders</span><span class="p">[</span><span class="n">lastTermWithLeader</span><span class="p">][</span><span class="m">0</span><span class="p">]</span>
+		<span class="p">}</span>
+	<span class="p">}</span>
+	<span class="n">cfg</span><span class="o">.</span><span class="n">t</span><span class="o">.</span><span class="n">Fatalf</span><span class="p">(</span><span class="s">"expected one leader, got none"</span><span class="p">)</span>
+	<span class="k">return</span> <span class="o">-</span><span class="m">1</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<h2 id="启动-go-程开始选举">启动 go 程，开始选举</h2>
+
+<p>我们读完测试用例之后，就可以尝试开始实现领导人选举。我们需要在 Make 函数中为该节点启动一个后台常驻 go 程，在里面发起选举。</p>
+
+<div class="language-go highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">func</span> <span class="n">Make</span><span class="p">(</span><span class="n">peers</span> <span class="p">[]</span><span class="o">*</span><span class="n">labrpc</span><span class="o">.</span><span class="n">ClientEnd</span><span class="p">,</span> <span class="n">me</span> <span class="kt">int</span><span class="p">,</span>
+	<span class="n">persister</span> <span class="o">*</span><span class="n">Persister</span><span class="p">,</span> <span class="n">applyCh</span> <span class="k">chan</span> <span class="n">ApplyMsg</span><span class="p">)</span> <span class="o">*</span><span class="n">Raft</span> <span class="p">{</span>
+	<span class="n">rf</span> <span class="o">:=</span> <span class="o">&amp;</span><span class="n">Raft</span><span class="p">{}</span>
+	<span class="n">rf</span><span class="o">.</span><span class="n">peers</span> <span class="o">=</span> <span class="n">peers</span>
+	<span class="n">rf</span><span class="o">.</span><span class="n">persister</span> <span class="o">=</span> <span class="n">persister</span>
+	<span class="n">rf</span><span class="o">.</span><span class="n">me</span> <span class="o">=</span> <span class="n">me</span>
+	<span class="c">// 代表无领导人。</span>
+	<span class="n">rf</span><span class="o">.</span><span class="n">leaderId</span> <span class="o">=</span> <span class="o">-</span><span class="m">1</span>
+	<span class="n">rf</span><span class="o">.</span><span class="n">currentTerm</span> <span class="o">=</span> <span class="m">0</span>
+	<span class="c">// 代表还未投票。</span>
+	<span class="n">rf</span><span class="o">.</span><span class="n">votedFor</span> <span class="o">=</span> <span class="o">-</span><span class="m">1</span>
+	<span class="n">rf</span><span class="o">.</span><span class="n">commitIndex</span> <span class="o">=</span> <span class="m">0</span>
+	<span class="n">rf</span><span class="o">.</span><span class="n">lastAppliedIndex</span> <span class="o">=</span> <span class="m">0</span>
+	<span class="n">rf</span><span class="o">.</span><span class="n">state</span> <span class="o">=</span> <span class="n">Follower</span>
+	<span class="n">rf</span><span class="o">.</span><span class="n">lastReceiveTime</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">Now</span><span class="p">()</span>
+	<span class="c">// 开始选举。</span>
+	<span class="k">go</span> <span class="n">rf</span><span class="o">.</span><span class="n">startLeaderElection</span><span class="p">()</span>
+	<span class="n">rf</span><span class="o">.</span><span class="n">readPersist</span><span class="p">(</span><span class="n">persister</span><span class="o">.</span><span class="n">ReadRaftState</span><span class="p">())</span>
+	<span class="k">return</span> <span class="n">rf</span>
+<span class="p">}</span>
+
+<span class="c">// 下面附带一些会用到的一些角色转换的函数。</span>
+<span class="k">func</span> <span class="p">(</span><span class="n">rf</span> <span class="o">*</span><span class="n">Raft</span><span class="p">)</span> <span class="n">convertToCandidate</span><span class="p">()</span> <span class="p">{</span>
+	<span class="n">rf</span><span class="o">.</span><span class="n">state</span> <span class="o">=</span> <span class="n">Candidate</span>
+	<span class="n">rf</span><span class="o">.</span><span class="n">currentTerm</span><span class="o">++</span>
+	<span class="n">rf</span><span class="o">.</span><span class="n">votedFor</span> <span class="o">=</span> <span class="n">rf</span><span class="o">.</span><span class="n">me</span>
+	<span class="n">rf</span><span class="o">.</span><span class="n">lastReceiveTime</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">Now</span><span class="p">()</span>
+<span class="p">}</span>
+
+<span class="k">func</span> <span class="p">(</span><span class="n">rf</span> <span class="o">*</span><span class="n">Raft</span><span class="p">)</span> <span class="n">convertToFollower</span><span class="p">(</span><span class="n">newTerm</span> <span class="kt">int</span><span class="p">)</span> <span class="p">{</span>
+	<span class="n">rf</span><span class="o">.</span><span class="n">state</span> <span class="o">=</span> <span class="n">Follower</span>
+	<span class="n">rf</span><span class="o">.</span><span class="n">currentTerm</span> <span class="o">=</span> <span class="n">newTerm</span>
+	<span class="n">rf</span><span class="o">.</span><span class="n">votedFor</span> <span class="o">=</span> <span class="o">-</span><span class="m">1</span>
+	<span class="n">rf</span><span class="o">.</span><span class="n">lastReceiveTime</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">Now</span><span class="p">()</span>
+<span class="p">}</span>
+
+<span class="k">func</span> <span class="p">(</span><span class="n">rf</span> <span class="o">*</span><span class="n">Raft</span><span class="p">)</span> <span class="n">convertToLeader</span><span class="p">()</span> <span class="p">{</span>
+	<span class="n">rf</span><span class="o">.</span><span class="n">state</span> <span class="o">=</span> <span class="n">Leader</span>
+	<span class="n">rf</span><span class="o">.</span><span class="n">leaderId</span> <span class="o">=</span> <span class="n">rf</span><span class="o">.</span><span class="n">me</span>
+	<span class="n">rf</span><span class="o">.</span><span class="n">lastReceiveTime</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">Now</span><span class="p">()</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>在 Make 函数中，我初始化了节点的基本信息，需要注意的是我为每个节点设置了一个叫做 <strong>lastReceiveTime</strong> 的字段，这个字段可以用作表示上次收到有效的 RPC 附加日志（在试验 A 中用作心跳）的时间，
+当我发现我们接受到有效心跳的时间到现在超过了选举超时时间限制时，我们就将其转换为候选人发起一轮新的选举。</p>
+
+<p>关于选举我选择直接在我们的选举 go 程中开 for 循环去执行，没有再使用额外的 go 程和 channel 来处理选举超时机制，因为我觉得对我来说那样可能会有滥用 channel 的嫌疑，造成不必要的心智负担：</p>
+
+<div class="language-go highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c">// 开始选举领导人。</span>
+<span class="c">// 当发生一次选举超时时，节点就开始一轮新的选举。</span>
+<span class="k">func</span> <span class="p">(</span><span class="n">rf</span> <span class="o">*</span><span class="n">Raft</span><span class="p">)</span> <span class="n">startLeaderElection</span><span class="p">()</span> <span class="p">{</span>
+	<span class="k">for</span> <span class="p">{</span>
+		<span class="n">electionTimeout</span> <span class="o">:=</span> <span class="n">rand</span><span class="o">.</span><span class="n">Intn</span><span class="p">(</span><span class="m">150</span><span class="p">)</span>
+		<span class="n">startTime</span> <span class="o">:=</span> <span class="n">time</span><span class="o">.</span><span class="n">Now</span><span class="p">()</span>
+		<span class="n">time</span><span class="o">.</span><span class="n">Sleep</span><span class="p">(</span><span class="n">time</span><span class="o">.</span><span class="n">Duration</span><span class="p">(</span><span class="n">HeartbeatInterval</span><span class="o">+</span><span class="n">electionTimeout</span><span class="p">)</span> <span class="o">*</span> <span class="n">time</span><span class="o">.</span><span class="n">Millisecond</span><span class="p">)</span>
+		<span class="n">rf</span><span class="o">.</span><span class="n">mu</span><span class="o">.</span><span class="n">Lock</span><span class="p">()</span>
+		<span class="k">if</span> <span class="n">atomic</span><span class="o">.</span><span class="n">LoadInt32</span><span class="p">(</span><span class="o">&amp;</span><span class="n">rf</span><span class="o">.</span><span class="n">dead</span><span class="p">)</span> <span class="o">==</span> <span class="n">Dead</span> <span class="p">{</span>
+			<span class="n">rf</span><span class="o">.</span><span class="n">mu</span><span class="o">.</span><span class="n">Unlock</span><span class="p">()</span>
+			<span class="k">return</span>
+		<span class="p">}</span>
+		<span class="c">// 在这个地方判断是否应该发起选举。</span>
+		<span class="k">if</span> <span class="n">rf</span><span class="o">.</span><span class="n">lastReceiveTime</span><span class="o">.</span><span class="n">Before</span><span class="p">(</span><span class="n">startTime</span><span class="p">)</span> <span class="p">{</span>
+			<span class="k">if</span> <span class="n">rf</span><span class="o">.</span><span class="n">state</span> <span class="o">!=</span> <span class="n">Leader</span> <span class="p">{</span>
+				<span class="n">DPrintf</span><span class="p">(</span><span class="s">"%d kicks off election on term: %d"</span><span class="p">,</span> <span class="n">rf</span><span class="o">.</span><span class="n">me</span><span class="p">,</span> <span class="n">rf</span><span class="o">.</span><span class="n">currentTerm</span><span class="p">)</span>
+				<span class="k">go</span> <span class="n">rf</span><span class="o">.</span><span class="n">kickOffElection</span><span class="p">()</span>
+			<span class="p">}</span>
+		<span class="p">}</span>
+		<span class="n">rf</span><span class="o">.</span><span class="n">mu</span><span class="o">.</span><span class="n">Unlock</span><span class="p">()</span>
+	<span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>我们可以看到真实的选举实际上被我放在了 <strong>kickOffElection</strong> 中：</p>
+
+<div class="language-go highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c">// 触发选举，向所有节点发出投票请求。</span>
+<span class="k">func</span> <span class="p">(</span><span class="n">rf</span> <span class="o">*</span><span class="n">Raft</span><span class="p">)</span> <span class="n">kickOffElection</span><span class="p">()</span> <span class="p">{</span>
+	<span class="n">rf</span><span class="o">.</span><span class="n">mu</span><span class="o">.</span><span class="n">Lock</span><span class="p">()</span>
+	<span class="c">// 将自己转换为候选人。</span>
+	<span class="n">rf</span><span class="o">.</span><span class="n">convertToCandidate</span><span class="p">()</span>
+	<span class="n">lastLogEntry</span> <span class="o">:=</span> <span class="n">rf</span><span class="o">.</span><span class="n">getLastLogEntry</span><span class="p">()</span>
+	<span class="n">args</span> <span class="o">:=</span> <span class="n">RequestVoteArgs</span><span class="p">{</span>
+		<span class="n">Term</span><span class="o">:</span>         <span class="n">rf</span><span class="o">.</span><span class="n">currentTerm</span><span class="p">,</span>
+		<span class="n">CandidateId</span><span class="o">:</span>  <span class="n">rf</span><span class="o">.</span><span class="n">me</span><span class="p">,</span>
+		<span class="n">LastLogIndex</span><span class="o">:</span> <span class="n">lastLogEntry</span><span class="o">.</span><span class="n">Index</span><span class="p">,</span>
+		<span class="n">LastLogTerm</span><span class="o">:</span>  <span class="n">lastLogEntry</span><span class="o">.</span><span class="n">Term</span><span class="p">,</span>
+	<span class="p">}</span>
+	<span class="n">numVote</span> <span class="o">:=</span> <span class="m">1</span>
+	<span class="n">rf</span><span class="o">.</span><span class="n">mu</span><span class="o">.</span><span class="n">Unlock</span><span class="p">()</span>
+	<span class="c">// 开始向每个节点发送投票请求。</span>
+	<span class="k">for</span> <span class="n">i</span> <span class="o">:=</span> <span class="m">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="nb">len</span><span class="p">(</span><span class="n">rf</span><span class="o">.</span><span class="n">peers</span><span class="p">);</span> <span class="n">i</span><span class="o">++</span> <span class="p">{</span>
+		<span class="k">if</span> <span class="n">i</span> <span class="o">!=</span> <span class="n">rf</span><span class="o">.</span><span class="n">me</span> <span class="p">{</span>
+			<span class="k">go</span> <span class="k">func</span><span class="p">(</span><span class="n">peerId</span> <span class="kt">int</span><span class="p">)</span> <span class="p">{</span>
+				<span class="n">reply</span> <span class="o">:=</span> <span class="n">RequestVoteReply</span><span class="p">{}</span>
+				<span class="n">DPrintf</span><span class="p">(</span><span class="s">"%d send vote request to %d"</span><span class="p">,</span> <span class="n">rf</span><span class="o">.</span><span class="n">me</span><span class="p">,</span> <span class="n">peerId</span><span class="p">)</span>
+				<span class="c">// 发出 RPC 消息，注意消息和回复字段要求大写。</span>
+				<span class="n">ok</span> <span class="o">:=</span> <span class="n">rf</span><span class="o">.</span><span class="n">sendRequestVoteRPC</span><span class="p">(</span><span class="n">peerId</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">args</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">reply</span><span class="p">)</span>
+				<span class="k">if</span> <span class="o">!</span><span class="n">ok</span> <span class="p">{</span>
+					<span class="k">return</span>
+				<span class="p">}</span>
+				<span class="n">rf</span><span class="o">.</span><span class="n">mu</span><span class="o">.</span><span class="n">Lock</span><span class="p">()</span>
+				<span class="k">defer</span> <span class="n">rf</span><span class="o">.</span><span class="n">mu</span><span class="o">.</span><span class="n">Unlock</span><span class="p">()</span>
+				<span class="c">// 如果投票人的 Term 比当前节点的 Term 大，那将节点转换为 Follower。</span>
+				<span class="k">if</span> <span class="n">reply</span><span class="o">.</span><span class="n">Term</span> <span class="o">&gt;</span> <span class="n">rf</span><span class="o">.</span><span class="n">currentTerm</span> <span class="p">{</span>
+					<span class="n">rf</span><span class="o">.</span><span class="n">convertToFollower</span><span class="p">(</span><span class="n">reply</span><span class="o">.</span><span class="n">Term</span><span class="p">)</span>
+					<span class="k">return</span>
+				<span class="p">}</span>
+				<span class="c">// 收到了有效投票，统计结果，如果获取系统中一半以上的选票，就将该节点转换为领导人，并且开始放发出心跳维持自己的统治。</span>
+				<span class="k">if</span> <span class="n">reply</span><span class="o">.</span><span class="n">VoteGranted</span> <span class="p">{</span>
+					<span class="n">numVote</span><span class="o">++</span>
+					<span class="k">if</span> <span class="n">numVote</span> <span class="o">&gt;</span> <span class="nb">len</span><span class="p">(</span><span class="n">rf</span><span class="o">.</span><span class="n">peers</span><span class="p">)</span><span class="o">/</span><span class="m">2</span> <span class="o">&amp;&amp;</span> <span class="n">rf</span><span class="o">.</span><span class="n">state</span> <span class="o">==</span> <span class="n">Candidate</span> <span class="p">{</span>
+						<span class="n">rf</span><span class="o">.</span><span class="n">convertToLeader</span><span class="p">()</span>
+						<span class="n">DPrintf</span><span class="p">(</span><span class="s">"%d become the leader on term: %d"</span><span class="p">,</span> <span class="n">rf</span><span class="o">.</span><span class="n">me</span><span class="p">,</span> <span class="n">rf</span><span class="o">.</span><span class="n">currentTerm</span><span class="p">)</span>
+						<span class="k">for</span> <span class="n">j</span> <span class="o">:=</span> <span class="m">0</span><span class="p">;</span> <span class="n">j</span> <span class="o">&lt;</span> <span class="nb">len</span><span class="p">(</span><span class="n">rf</span><span class="o">.</span><span class="n">peers</span><span class="p">);</span> <span class="n">j</span><span class="o">++</span> <span class="p">{</span>
+							<span class="k">if</span> <span class="n">j</span> <span class="o">!=</span> <span class="n">rf</span><span class="o">.</span><span class="n">me</span> <span class="p">{</span>
+								<span class="k">go</span> <span class="n">rf</span><span class="o">.</span><span class="n">replicaLogToPeer</span><span class="p">(</span><span class="n">j</span><span class="p">)</span>
+							<span class="p">}</span>
+						<span class="p">}</span>
+					<span class="p">}</span>
+				<span class="p">}</span>
+			<span class="p">}(</span><span class="n">i</span><span class="p">)</span>
+		<span class="p">}</span>
+	<span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>我们来简单梳理一下这部分逻辑：</p>
+
+<ul>
+  <li>1.先将自己的角色转换为候选人，<strong>并且在请求消息中带上自己的当前 Term 和 自身编号</strong>。</li>
+  <li>2.向每个节点发出投票请求（需要注意在实验中的 RPC 的消息和回复数据结构字段都要大写，否则会发送 RPC 失败）。</li>
+  <li>3.收到回复，如果投票人的 Term 比该节点大，那就将改节点转换为 Follower 结束选举。如果成功获得选票，就判断是否已经收到足够多的选票，节点转换为领导人，并且启动一个 go 程开始发送心跳维持统治（go rf.replicaLogToPeer(j)）。</li>
+</ul>
+
+<p>在开始查看如何发送心跳之前，我们先来看看作为其他节点我们应该如何依照上面分析的规则进行投票，我们的投票 RPC 都是交给了 RequestVote 函数去处理：</p>
+
+<div class="language-go highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c">//</span>
+<span class="c">// 投票请求 RPC 处理.</span>
+<span class="c">//</span>
+<span class="k">func</span> <span class="p">(</span><span class="n">rf</span> <span class="o">*</span><span class="n">Raft</span><span class="p">)</span> <span class="n">RequestVote</span><span class="p">(</span><span class="n">args</span> <span class="o">*</span><span class="n">RequestVoteArgs</span><span class="p">,</span> <span class="n">reply</span> <span class="o">*</span><span class="n">RequestVoteReply</span><span class="p">)</span> <span class="p">{</span>
+	<span class="n">rf</span><span class="o">.</span><span class="n">mu</span><span class="o">.</span><span class="n">Lock</span><span class="p">()</span>
+	<span class="k">defer</span> <span class="n">rf</span><span class="o">.</span><span class="n">mu</span><span class="o">.</span><span class="n">Unlock</span><span class="p">()</span>
+	<span class="n">DPrintf</span><span class="p">(</span><span class="s">"%d start process vote request"</span><span class="p">,</span> <span class="n">rf</span><span class="o">.</span><span class="n">me</span><span class="p">)</span>
+	<span class="c">// 设置回复消息的 Term。</span>
+	<span class="n">reply</span><span class="o">.</span><span class="n">Term</span> <span class="o">=</span> <span class="n">rf</span><span class="o">.</span><span class="n">currentTerm</span>
+	<span class="c">// 对应我上面说的关于 Term 的那一条规则。</span>
+	<span class="k">if</span> <span class="n">args</span><span class="o">.</span><span class="n">Term</span> <span class="o">&lt;</span> <span class="n">rf</span><span class="o">.</span><span class="n">currentTerm</span> <span class="p">{</span>
+		<span class="n">reply</span><span class="o">.</span><span class="n">VoteGranted</span> <span class="o">=</span> <span class="no">false</span>
+		<span class="n">DPrintf</span><span class="p">(</span><span class="s">"%d refuse vote for %d"</span><span class="p">,</span> <span class="n">rf</span><span class="o">.</span><span class="n">me</span><span class="p">,</span> <span class="n">args</span><span class="o">.</span><span class="n">CandidateId</span><span class="p">)</span>
+	<span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+		<span class="c">// 如果候选人的 Term 比我们的大，那我们应该将自己转换为 Follower。</span>
+		<span class="k">if</span> <span class="n">args</span><span class="o">.</span><span class="n">Term</span> <span class="o">&gt;</span> <span class="n">rf</span><span class="o">.</span><span class="n">currentTerm</span> <span class="p">{</span>
+			<span class="n">rf</span><span class="o">.</span><span class="n">convertToFollower</span><span class="p">(</span><span class="n">args</span><span class="o">.</span><span class="n">Term</span><span class="p">)</span>
+		<span class="p">}</span>
+		<span class="n">lastEntry</span> <span class="o">:=</span> <span class="n">rf</span><span class="o">.</span><span class="n">getLastLogEntry</span><span class="p">()</span>
+		<span class="c">// 对应我上面说的关于日志的那一条规则。</span>
+		<span class="n">logUpToDate</span> <span class="o">:=</span> <span class="n">LogEntry</span><span class="p">{</span><span class="n">Command</span><span class="o">:</span> <span class="no">nil</span><span class="p">,</span> <span class="n">Index</span><span class="o">:</span> <span class="n">args</span><span class="o">.</span><span class="n">LastLogIndex</span><span class="p">,</span> <span class="n">Term</span><span class="o">:</span> <span class="n">args</span><span class="o">.</span><span class="n">LastLogTerm</span><span class="p">}</span><span class="o">.</span><span class="n">isMoreUpToDate</span><span class="p">(</span><span class="n">lastEntry</span><span class="p">)</span>
+		<span class="k">if</span> <span class="n">rf</span><span class="o">.</span><span class="n">votedFor</span> <span class="o">==</span> <span class="o">-</span><span class="m">1</span> <span class="o">&amp;&amp;</span> <span class="n">logUpToDate</span> <span class="p">{</span>
+			<span class="n">rf</span><span class="o">.</span><span class="n">votedFor</span> <span class="o">=</span> <span class="n">args</span><span class="o">.</span><span class="n">CandidateId</span>
+			<span class="n">reply</span><span class="o">.</span><span class="n">VoteGranted</span> <span class="o">=</span> <span class="no">true</span>
+			<span class="n">DPrintf</span><span class="p">(</span><span class="s">"%d vote for %d"</span><span class="p">,</span> <span class="n">rf</span><span class="o">.</span><span class="n">me</span><span class="p">,</span> <span class="n">args</span><span class="o">.</span><span class="n">CandidateId</span><span class="p">)</span>
+		<span class="p">}</span>
+	<span class="p">}</span>
+<span class="p">}</span>
+
+<span class="c">// 是否更新更长.</span>
+<span class="k">func</span> <span class="p">(</span><span class="n">l</span> <span class="n">LogEntry</span><span class="p">)</span> <span class="n">isMoreUpToDate</span><span class="p">(</span><span class="n">r</span> <span class="n">LogEntry</span><span class="p">)</span> <span class="kt">bool</span> <span class="p">{</span>
+	<span class="k">return</span> <span class="p">(</span><span class="n">l</span><span class="o">.</span><span class="n">Term</span> <span class="o">==</span> <span class="n">r</span><span class="o">.</span><span class="n">Term</span> <span class="o">&amp;&amp;</span> <span class="n">l</span><span class="o">.</span><span class="n">Index</span> <span class="o">&gt;=</span> <span class="n">r</span><span class="o">.</span><span class="n">Index</span><span class="p">)</span> <span class="o">||</span> <span class="n">l</span><span class="o">.</span><span class="n">Term</span> <span class="o">&gt;</span> <span class="n">r</span><span class="o">.</span><span class="n">Term</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>在上面的 RequestVote 函数中，我们主要就是根据分析中描述的规则进行投票。接下来我们看看当节点顺利成为领导人之后如何用心跳来维持自己的统治。领导人需要正确的发送心跳，不停的刷新 Follower 的 lastReceiveTime：</p>
+
+<div class="language-go highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c">// 发送日志到附加节点，还是采用 for 循环的形式。</span>
+<span class="k">func</span> <span class="p">(</span><span class="n">rf</span> <span class="o">*</span><span class="n">Raft</span><span class="p">)</span> <span class="n">replicaLogToPeer</span><span class="p">(</span><span class="n">peerId</span> <span class="kt">int</span><span class="p">)</span> <span class="p">{</span>
+	<span class="n">DPrintf</span><span class="p">(</span><span class="s">"%d start sync log to %d"</span><span class="p">,</span> <span class="n">rf</span><span class="o">.</span><span class="n">me</span><span class="p">,</span> <span class="n">peerId</span><span class="p">)</span>
+	<span class="k">for</span> <span class="p">{</span>
+		<span class="n">rf</span><span class="o">.</span><span class="n">mu</span><span class="o">.</span><span class="n">Lock</span><span class="p">()</span>
+		<span class="k">if</span> <span class="n">rf</span><span class="o">.</span><span class="n">state</span> <span class="o">!=</span> <span class="n">Leader</span> <span class="p">{</span>
+			<span class="n">rf</span><span class="o">.</span><span class="n">mu</span><span class="o">.</span><span class="n">Unlock</span><span class="p">()</span>
+			<span class="n">DPrintf</span><span class="p">(</span><span class="s">"%d stop sends append entries to %d"</span><span class="p">,</span> <span class="n">rf</span><span class="o">.</span><span class="n">me</span><span class="p">,</span> <span class="n">peerId</span><span class="p">)</span>
+			<span class="k">return</span>
+		<span class="p">}</span>
+		<span class="n">rf</span><span class="o">.</span><span class="n">mu</span><span class="o">.</span><span class="n">Unlock</span><span class="p">()</span>
+		<span class="k">go</span> <span class="n">rf</span><span class="o">.</span><span class="n">sendAppendEntry</span><span class="p">(</span><span class="n">peerId</span><span class="p">)</span>
+		<span class="c">// 设置一定心跳间隔。</span>
+		<span class="n">time</span><span class="o">.</span><span class="n">Sleep</span><span class="p">(</span><span class="n">HeartbeatInterval</span> <span class="o">*</span> <span class="n">time</span><span class="o">.</span><span class="n">Millisecond</span><span class="p">)</span>
+	<span class="p">}</span>
+<span class="p">}</span>
+
+<span class="c">// 发送日志给节点.</span>
+<span class="k">func</span> <span class="p">(</span><span class="n">rf</span> <span class="o">*</span><span class="n">Raft</span><span class="p">)</span> <span class="n">sendAppendEntry</span><span class="p">(</span><span class="n">peerId</span> <span class="kt">int</span><span class="p">)</span> <span class="p">{</span>
+	<span class="n">rf</span><span class="o">.</span><span class="n">mu</span><span class="o">.</span><span class="n">Lock</span><span class="p">()</span>
+	<span class="n">lastLogEntry</span> <span class="o">:=</span> <span class="n">rf</span><span class="o">.</span><span class="n">getLastLogEntry</span><span class="p">()</span>
+	<span class="n">args</span> <span class="o">:=</span> <span class="n">AppendEntriesArgs</span><span class="p">{</span>
+		<span class="n">Term</span><span class="o">:</span>         <span class="n">rf</span><span class="o">.</span><span class="n">currentTerm</span><span class="p">,</span> <span class="c">// 我们需要填好这个值，在其他节点处理该请求的时候会用到这个值。</span>
+		<span class="n">LeaderId</span><span class="o">:</span>     <span class="n">rf</span><span class="o">.</span><span class="n">me</span><span class="p">,</span> <span class="c">// 设置自己为的编号。</span>
+		<span class="n">PrevLogIndex</span><span class="o">:</span> <span class="n">lastLogEntry</span><span class="o">.</span><span class="n">Index</span><span class="p">,</span> <span class="c">// 这个值对我们目前实验无影响。</span>
+		<span class="n">Entries</span><span class="o">:</span>      <span class="no">nil</span><span class="p">,</span> <span class="c">// 表示心跳。</span>
+		<span class="n">LeaderCommit</span><span class="o">:</span> <span class="o">-</span><span class="m">1</span><span class="p">,</span> <span class="c">// 这个值对我们目前实验无影响，瞎填就可以.</span>
+	<span class="p">}</span>
+	<span class="n">reply</span> <span class="o">:=</span> <span class="n">AppendEntriesReply</span><span class="p">{}</span>
+	<span class="n">rf</span><span class="o">.</span><span class="n">mu</span><span class="o">.</span><span class="n">Unlock</span><span class="p">()</span>
+	<span class="c">// 发送日志 RPC。</span>
+	<span class="n">ok</span> <span class="o">:=</span> <span class="n">rf</span><span class="o">.</span><span class="n">sendAppendEntryRPC</span><span class="p">(</span><span class="n">peerId</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">args</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">reply</span><span class="p">)</span>
+	<span class="k">if</span> <span class="o">!</span><span class="n">ok</span> <span class="p">{</span>
+		<span class="n">log</span><span class="o">.</span><span class="n">Printf</span><span class="p">(</span><span class="s">"%d send a append PRC to %d failed"</span><span class="p">,</span> <span class="n">rf</span><span class="o">.</span><span class="n">me</span><span class="p">,</span> <span class="n">peerId</span><span class="p">)</span>
+		<span class="k">return</span>
+	<span class="p">}</span>
+	<span class="n">rf</span><span class="o">.</span><span class="n">mu</span><span class="o">.</span><span class="n">Lock</span><span class="p">()</span>
+	<span class="k">defer</span> <span class="n">rf</span><span class="o">.</span><span class="n">mu</span><span class="o">.</span><span class="n">Unlock</span><span class="p">()</span>
+	<span class="c">// 如果发现回复的 Term 比我们自己的高，我们就将自己转换为 Follower。</span>
+	<span class="k">if</span> <span class="n">reply</span><span class="o">.</span><span class="n">Term</span> <span class="o">&gt;</span> <span class="n">rf</span><span class="o">.</span><span class="n">currentTerm</span> <span class="p">{</span>
+		<span class="n">rf</span><span class="o">.</span><span class="n">convertToFollower</span><span class="p">(</span><span class="n">reply</span><span class="o">.</span><span class="n">Term</span><span class="p">)</span>
+		<span class="k">return</span>
+	<span class="p">}</span>
+	<span class="n">log</span><span class="o">.</span><span class="n">Printf</span><span class="p">(</span><span class="s">"%d success send a append to %d"</span><span class="p">,</span> <span class="n">rf</span><span class="o">.</span><span class="n">me</span><span class="p">,</span> <span class="n">peerId</span><span class="p">)</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>上面的函数 replicaLogToPeer 和 sendAppendEntry 完成心跳 RPC 不停发送和回复处理。我们再来看一看其他节点收到心跳之后该如何处理：</p>
+
+<div class="language-go highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c">//</span>
+<span class="c">// 附加日志 RPC 处理.</span>
+<span class="c">//</span>
+<span class="k">func</span> <span class="p">(</span><span class="n">rf</span> <span class="o">*</span><span class="n">Raft</span><span class="p">)</span> <span class="n">AppendEntries</span><span class="p">(</span><span class="n">args</span> <span class="o">*</span><span class="n">AppendEntriesArgs</span><span class="p">,</span> <span class="n">reply</span> <span class="o">*</span><span class="n">AppendEntriesReply</span><span class="p">)</span> <span class="p">{</span>
+	<span class="n">rf</span><span class="o">.</span><span class="n">mu</span><span class="o">.</span><span class="n">Lock</span><span class="p">()</span>
+	<span class="k">defer</span> <span class="n">rf</span><span class="o">.</span><span class="n">mu</span><span class="o">.</span><span class="n">Unlock</span><span class="p">()</span>
+	<span class="n">log</span><span class="o">.</span><span class="n">Printf</span><span class="p">(</span><span class="s">"%d start process append entries request from %d, args term: %d node term: %d"</span><span class="p">,</span> <span class="n">rf</span><span class="o">.</span><span class="n">me</span><span class="p">,</span> <span class="n">args</span><span class="o">.</span><span class="n">LeaderId</span><span class="p">,</span> <span class="n">args</span><span class="o">.</span><span class="n">Term</span><span class="p">,</span> <span class="n">rf</span><span class="o">.</span><span class="n">currentTerm</span><span class="p">)</span>
+	<span class="c">// 如果 Term 比改节点的小，那我们就认为这是一条无效的心跳，直接返回。</span>
+	<span class="k">if</span> <span class="n">args</span><span class="o">.</span><span class="n">Term</span> <span class="o">&lt;</span> <span class="n">rf</span><span class="o">.</span><span class="n">currentTerm</span> <span class="p">{</span>
+		<span class="n">DPrintf</span><span class="p">(</span><span class="s">"get append entries form %d, but the term less than %d"</span><span class="p">,</span> <span class="n">args</span><span class="o">.</span><span class="n">LeaderId</span><span class="p">,</span> <span class="n">rf</span><span class="o">.</span><span class="n">me</span><span class="p">)</span>
+		<span class="n">reply</span><span class="o">.</span><span class="n">Term</span><span class="p">,</span> <span class="n">reply</span><span class="o">.</span><span class="n">Success</span> <span class="o">=</span> <span class="n">rf</span><span class="o">.</span><span class="n">currentTerm</span><span class="p">,</span> <span class="no">false</span>
+		<span class="k">return</span>
+	<span class="p">}</span>
+	<span class="c">// 刷新该节点的 lastReceiveTime.</span>
+	<span class="n">reply</span><span class="o">.</span><span class="n">Term</span> <span class="o">=</span> <span class="n">rf</span><span class="o">.</span><span class="n">currentTerm</span>
+	<span class="n">rf</span><span class="o">.</span><span class="n">leaderId</span> <span class="o">=</span> <span class="n">args</span><span class="o">.</span><span class="n">LeaderId</span>
+	<span class="n">rf</span><span class="o">.</span><span class="n">lastReceiveTime</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">Now</span><span class="p">()</span>
+
+	<span class="k">if</span> <span class="n">args</span><span class="o">.</span><span class="n">Term</span> <span class="o">&gt;</span> <span class="n">rf</span><span class="o">.</span><span class="n">currentTerm</span> <span class="p">{</span>
+		<span class="n">DPrintf</span><span class="p">(</span><span class="s">"%d convert itself as follower"</span><span class="p">,</span> <span class="n">rf</span><span class="o">.</span><span class="n">me</span><span class="p">)</span>
+		<span class="n">rf</span><span class="o">.</span><span class="n">convertToFollower</span><span class="p">(</span><span class="n">args</span><span class="o">.</span><span class="n">Term</span><span class="p">)</span>
+	<span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>上面的 AppendEntries 函数主要的作用就是去刷新 Follower 的最近一次接受到有效心跳的时间，阻止该节点发生选举超时，从而维持自己的统治。</p>
+
+<p>到此为止，我们就实现完了一个简单的领导人选举，思路其实还是很清晰，主要就是完全遵照论文的数据结构和规则来按部就班的实现。由于课程要求不能公开源码，所以我就不提供实现链接啦，
+希望这篇文章能帮助你梳理和理解实验 A 的实现思路。最近我也在尝试实现 Rust 版本的 Raft，到时候再来跟大家分享交流源码吧😁</p>
+
+<h2 id="踩坑记录">踩坑记录</h2>
+
+<p>看上去领导人选举的思路非常简单，但是我在实现的过程中也踩了不少的坑：</p>
+
+<ul>
+  <li>注意锁的获取和释放，因为到处都在获取和释放，有可能会导致因为拿锁不当导致死锁（我有一天写出了 defer rf.mu.Lock 这样的代码）。</li>
+  <li>心跳间隔不要设置大大，否则就会偶尔出现领导人正常但是触发选举的情况（测试用例会警告）。</li>
+  <li>调试需要多打 log，不然根本都不知道到底什么地方出了问题。</li>
+  <li>测试要多跑几遍来验证结果，推荐一个来自大神 <a href="https://github.com/jonhoo">Jon Gjengset</a> 的<a href="https://gist.github.com/jonhoo/f686cacb4b9fe716d5aa">测试脚本</a>。</li>
+</ul>
+
+<hr />
+
+<h3 id="参考链接">参考链接</h3>
+
+<p><a href="https://zhuanlan.zhihu.com/p/103849249">MIT 6.824 2020 Raft 实现细节汇总</a></p>
+
+<p><a href="https://www.youtube.com/watch?v=UzzcUS2OHqo">Raft 课程视频</a></p>
+
+<p><a href="https://github.com/xingdl2007/6.824-2017">6.824 社区实现</a></p>
+
+<p><a href="https://github.com/maemual/raft-zh_cn">Raft 论文中文翻译</a></p>
+
+<h3 id="文章链接">文章链接</h3>
+
+<p>文章首发于： <a href="https://rustin.me/">Rustin 的博客</a></p>
+
+<p>同步更新：</p>
+
+<p><a href="https://zhuanlan.zhihu.com/p/129316906">知乎</a></p>
+
+<p><a href="">简书</a></p>
+
+<p><a href="">掘金</a></p>
+
+<p><a href="">segmentfault</a></p>
+
+
+    <p class="signature">&mdash; Rustin</p>
+  </div>
+  <script>
+    (function () {
+      anchors.options.placement = 'right';
+      anchors.add('.content > h3, .content > h4, .content > h5, .content > h6');
+    })();
+  </script>
+  <script src="https://giscus.app/client.js" data-repo="Rustin170506/blog"
+    data-repo-id="MDEwOlJlcG9zaXRvcnkyMTU4MDI0NDg=" data-category="Ideas" data-category-id="DIC_kwDODNziUM4CY_bg"
+    data-mapping="title" data-strict="0" data-reactions-enabled="1" data-emit-metadata="0" data-input-position="top"
+    data-theme="light" data-lang="en" data-loading="lazy" crossorigin="anonymous" async>
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TiDB High Performance 课程实验 1 - Rustin</title>
+  <link rel="stylesheet" href="https://netdna.bootstrapcdn.com/bootstrap/3.1.1/css/bootstrap.min.css" type="text/css">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Merriweather+Sans:400,300,700" type="text/css">
+  <link rel="stylesheet" href="/static/app.css" type="text/css">
+  <link rel="stylesheet" href="/static/syntax.css" type="text/css">
+  <link type="application/atom+xml" rel="alternate" href="http://localhost:4000/feed.xml" />
+  <meta name="theme-color" content="#111111">
+
+  <meta name="og:type" content="article">
+  <meta name="og:title" content="TiDB High Performance 课程实验 1 – Rustin">
+  <meta name="og:description" content="">
+  <meta name="og:site_name" content="Rustin">
+  <meta name="og:url" content="http://localhost:4000/TiDB-High-Performance-%E8%AF%BE%E7%A8%8B%E5%AE%9E%E9%AA%8C-1/">
+  
+  <meta name="og:image" content="http://localhost:4000/static/default_image.jpg">
+  
+  <meta property="article:published_time" content=" 2020-09-03">
+
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:site" content="@hi_rustin">
+  <meta name="twitter:domain" content="rustin.me">
+  <meta name="twitter:title" content="TiDB High Performance 课程实验 1 – Rustin">
+  <meta name="twitter:description" content="">
+  
+  <meta name="twitter:image" content="http://localhost:4000/static/default_image.jpg">
+  
+  <meta name="twitter:url" content="http://localhost:4000/TiDB-High-Performance-%E8%AF%BE%E7%A8%8B%E5%AE%9E%E9%AA%8C-1/">
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/anchor-js/3.2.0/anchor.min.js"></script>
+</head>
+
+<body>
+  <header>
+    <h1><a href="/">Rustin</a></h1>
+    <span>I’m a passionate software engineer who specializes in distributed systems and dev tools.</span>
+  </header>
+
+  <div class="content post">
+    <h2>TiDB High Performance 课程实验 1</h2>
+    <p class="date">03 September 2020</p>
+
+    <p>大家好，我是 <a href="https://github.com/Rustin170506">Rustin</a>. 最近开始做贵司推出的 TiDB High Performance 课程，所以开个课程实验记录的坑！</p>
+
+<p>此博客在 <a href="https://github.com/Rustin170506/blog">GitHub</a> 上公开发布. 如果您有任何问题或疑问，请在此处打开一个 <a href="https://github.com/Rustin170506/blog/issues">issue</a>.</p>
+
+<h2 id="简介">简介</h2>
+
+<p>在高性能挑战赛的 <a href="https://docs.qq.com/sheet/DSlBwS3VCb01kTnZw?tab=BB08J2">文档</a> 中找到第一节课的实验描述，实验需要分别下载和编译 TiDB, TiKV 和 PD，
+并且需要修改 TiDB 源码让其在启动事务的时候，打印一句 <code class="language-plaintext highlighter-rouge">hello transation</code> 的日志。下面我就简单记录一下整个实验过程。</p>
+
+<h2 id="克隆源码并编译">克隆源码并编译</h2>
+
+<p>需要分别克隆和编译 <a href="https://github.com/pingcap/tidb">TiDB</a>, <a href="https://github.com/tikv/tikv">TiKV</a> 和 <a href="https://github.com/tikv/pd">PD</a>.
+这三个库分别对应了 TiDB 中的计算，存储和调度三个层面。具体内容可以参考课程文档中对应的三篇文章。</p>
+
+<h3 id="编译-tidb">编译 TiDB</h3>
+
+<div class="language-sh highlighter-rouge"><div class="highlight"><pre class="highlight"><code>git clone https://github.com/Rustin170506/tidb
+</code></pre></div></div>
+<p>在编译之前，需要我们安装 <strong>make</strong> 工具，因为三个项目的 build 都是用 makefile 来组织的。查看 makefile 可以看到 <code class="language-plaintext highlighter-rouge">.PHONY</code> 中有个 server
+的伪目标。内容如下：</p>
+
+<div class="language-makefile highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nl">server</span><span class="o">:</span>
+<span class="k">ifeq</span> <span class="nv">($(TARGET), "")</span>
+	<span class="nv">CGO_ENABLED</span><span class="o">=</span>1 <span class="nv">$(GOBUILD)</span> <span class="nv">$(RACE_FLAG)</span> <span class="nt">-ldflags</span> <span class="s1">'</span><span class="nv">$(LDFLAGS)</span><span class="s1"> </span><span class="nv">$(CHECK_FLAG)</span><span class="s1">'</span> <span class="nt">-o</span> bin/tidb-server tidb-server/main.go
+<span class="k">else</span>
+	<span class="nv">CGO_ENABLED</span><span class="o">=</span>1 <span class="nv">$(GOBUILD)</span> <span class="nv">$(RACE_FLAG)</span> <span class="nt">-ldflags</span> <span class="s1">'</span><span class="nv">$(LDFLAGS)</span><span class="s1"> </span><span class="nv">$(CHECK_FLAG)</span><span class="s1">'</span> <span class="nt">-o</span> <span class="s1">'</span><span class="nv">$(TARGET)</span><span class="s1">'</span> tidb-server/main.go
+<span class="k">endif</span>
+</code></pre></div></div>
+
+<p>可以看到这就是编译 TiDB server 的命令，该命令会把 server 编译到 bin 目录下。但是实际上在 TiDB 的伪目标中原来还有个 build 的命令，
+它是个无用的命令，没有地方用到了这个命令。所以我就提交了个 <a href="https://github.com/pingcap/tidb/pull/19221">PR</a> 把它删除了。运行使用 <code class="language-plaintext highlighter-rouge">make server</code> 即可。</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>make server
+</code></pre></div></div>
+
+<p>在编译完成后，bin 目录如下所示：</p>
+<div class="language-sh highlighter-rouge"><div class="highlight"><pre class="highlight"><code>➜  bin git:<span class="o">(</span>master<span class="o">)</span> ✗ tree
+<span class="nb">.</span>
+└── tidb-server
+
+0 directories, 1 file
+</code></pre></div></div>
+
+<h3 id="编译-tikv">编译 TiKV</h3>
+
+<div class="language-sh highlighter-rouge"><div class="highlight"><pre class="highlight"><code>git clone https://github.com/Rustin170506/tikv
+</code></pre></div></div>
+
+<p>在编译之前我也是需要安装好 build TiKV 项目工具链，可以在 <a href="https://github.com/tikv/tikv/blob/master/CONTRIBUTING.md">CONTRIBUTING</a> 里面找到一些需要的依赖。
+主要就是再装一个 <strong>cmake</strong>，安装完成之后我们就可以进行 TiKV 的编译了。查看 makefile 找到编译命令如下：</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>build:
+	cargo build --no-default-features --features "${ENABLE_FEATURES}"
+</code></pre></div></div>
+
+<p>TiKV 这边的比较直观，就是叫 build。实际上就是运行 <a href="https://github.com/rust-lang/cargo">cargo</a> 的 build 命令。运行 <code class="language-plaintext highlighter-rouge">make build</code>.</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>make build
+</code></pre></div></div>
+
+<p>cargo 编译完的二进制文件在 target 中，目录如下所示：</p>
+
+<div class="language-sh highlighter-rouge"><div class="highlight"><pre class="highlight"><code>➜  debug git:<span class="o">(</span>master<span class="o">)</span> <span class="nb">ls
+</span>build            incremental      tikv-ctl         tikv-server
+deps             libcmd.d         tikv-ctl.d       tikv-server.d
+examples         libcmd.rlib      tikv-ctl.dSYM    tikv-server.dSYM
+</code></pre></div></div>
+
+<p>可以找到名字为 <code class="language-plaintext highlighter-rouge">tikv-server</code> 的二进制文件。</p>
+
+<h3 id="编译-pd">编译 PD</h3>
+
+<div class="language-sh highlighter-rouge"><div class="highlight"><pre class="highlight"><code>git clone https://github.com/Rustin170506/pd
+</code></pre></div></div>
+
+<p>PD 中也没有特殊的编译工具链要求，直接使用查看 makefile 找到编译的命令：</p>
+
+<div class="language-sh highlighter-rouge"><div class="highlight"><pre class="highlight"><code>build: pd-server pd-ctl pd-recover
+
+pd-server: <span class="nb">export </span><span class="nv">GO111MODULE</span><span class="o">=</span>on
+pd-server: <span class="k">${</span><span class="nv">PD_SERVER_DEP</span><span class="k">}</span>
+	<span class="nv">CGO_ENABLED</span><span class="o">=</span><span class="si">$(</span>BUILD_CGO_ENABLED<span class="si">)</span> go build <span class="si">$(</span>BUILD_FLAGS<span class="si">)</span> <span class="nt">-gcflags</span> <span class="s1">'$(GCFLAGS)'</span> <span class="nt">-ldflags</span> <span class="s1">'$(LDFLAGS)'</span> <span class="nt">-tags</span> <span class="s2">"</span><span class="si">$(</span>BUILD_TAGS<span class="si">)</span><span class="s2">"</span> <span class="nt">-o</span> bin/pd-server cmd/pd-server/main.go
+</code></pre></div></div>
+
+<p>运行 <code class="language-plaintext highlighter-rouge">make build</code> 得到如下的目录：</p>
+
+<div class="language-sh highlighter-rouge"><div class="highlight"><pre class="highlight"><code>➜  bin git:<span class="o">(</span>master<span class="o">)</span> tree
+<span class="nb">.</span>
+├── pd-ctl
+├── pd-recover
+└── pd-server
+</code></pre></div></div>
+
+<h2 id="使用-tiup-部署本地集群">使用 TiUP 部署本地集群</h2>
+
+<p>可以尝试使用 <a href="https://tiup.io/">tiup</a> 来部署本地集群测试。TiUP 是贵司在 TiDB 4.0 时研发的一个新的部署工具，据说是受到 <a href="https://rustup.rs/">rustup</a> 的启发做的。
+利用 TiUP 使用自己编译的二进制文件即可快速的部署一套本地的集群测试。但是似乎 TiUP 官网的文档链接主要是针服务器上的部署，但是可以在 <a href="https://book.tidb.io/session2/chapter1/tiup-playground.html">TiDB in action</a>
+的 TiUP 部署本地测试环境章节中找到通过指定二进制文件路径来启动本地集群的参数。</p>
+
+<p>参数如下所示：</p>
+
+<div class="language-sh highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Usage:
+  tiup playground <span class="o">[</span>version] <span class="o">[</span>flags]
+
+Flags:
+      <span class="nt">--db</span>.binpath string   TiDB instance binary path
+      <span class="nt">--kv</span>.binpath string   TiKV instance binary path
+      <span class="nt">--pd</span>.binpath string   PD instance binary path
+</code></pre></div></div>
+
+<p>通过这三个参数，可以快速的利用 TiUP 使用自己编译的二进制文件启动本地集群。使用如下命令启动集群：</p>
+
+<div class="language-sh highlighter-rouge"><div class="highlight"><pre class="highlight"><code>➜  ~ tiup playground <span class="nt">--db</span>.binpath /Users/rustin/GolandProjects/tidb/bin/tidb-server <span class="nt">--kv</span>.binpath /Users/rustin/ClionProjects/tikv/target/debug/tikv-server <span class="nt">--pd</span>.binpath /Users/rustin/GolandProjects/pd/bin/pd-server
+</code></pre></div></div>
+
+<p>输出以下内容之后启动成功：</p>
+
+<div class="language-sh highlighter-rouge"><div class="highlight"><pre class="highlight"><code>CLUSTER START SUCCESSFULLY, Enjoy it ^-^
+To connect TiDB: mysql <span class="nt">--host</span> 127.0.0.1 <span class="nt">--port</span> 4000 <span class="nt">-u</span> root
+To view the dashboard: http://127.0.0.1:2379/dashboard
+To view the Prometheus: http://127.0.0.1:9090
+To view the Grafana: http://127.0.0.1:3000
+</code></pre></div></div>
+
+<p>启动成功后使用 mysql 客户端连接成功：</p>
+
+<div class="language-sh highlighter-rouge"><div class="highlight"><pre class="highlight"><code>➜  ~ mysql <span class="nt">--host</span> 127.0.0.1 <span class="nt">--port</span> 4000 <span class="nt">-u</span> root
+Welcome to the MySQL monitor.  Commands end with <span class="p">;</span> or <span class="se">\g</span><span class="nb">.</span>
+Your MySQL connection <span class="nb">id </span>is 2
+Server version: 5.7.25-TiDB-v4.0.0-beta.2-1101-gf82e5320a-dirty TiDB Server <span class="o">(</span>Apache License 2.0<span class="o">)</span> Community Edition, MySQL 5.7 compatible
+
+Copyright <span class="o">(</span>c<span class="o">)</span> 2000, 2020, Oracle and/or its affiliates. All rights reserved.
+
+Oracle is a registered trademark of Oracle Corporation and/or its
+affiliates. Other names may be trademarks of their respective
+owners.
+
+Type <span class="s1">'help;'</span> or <span class="s1">'\h'</span> <span class="k">for </span>help. Type <span class="s1">'\c'</span> to clear the current input statement.
+
+mysql&gt; use <span class="nb">test</span><span class="p">;</span>
+Database changed
+</code></pre></div></div>
+
+<h2 id="输出-hello-transation">输出 <code class="language-plaintext highlighter-rouge">hello transation</code></h2>
+
+<h3 id="输出到-warnings">输出到 <code class="language-plaintext highlighter-rouge">warnings</code></h3>
+
+<p>原来的题目描述中其实并没有要求输出到日志中，所以我想要不直接输出到 <code class="language-plaintext highlighter-rouge">warnings</code> 中。为了找到与事务开始的相关的代码，我先去 ast 包中搜索 begin 关键字找到了 begin 语句的定义。
+然后通过 <code class="language-plaintext highlighter-rouge">GoLand</code> 搜索引用，找到了相关的引用：</p>
+
+<p><img src="../static/files/post-images/2020-09-03/usages.png" alt="" /></p>
+
+<p>通过引用找到了执行 begin 语句的函数，它被定义在 <code class="language-plaintext highlighter-rouge">simple.go</code> 中。尝试直接添加输出到 warnings：</p>
+
+<div class="language-go highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c">// FILE: tidb/executor/simple.go</span>
+
+<span class="k">func</span> <span class="p">(</span><span class="n">e</span> <span class="o">*</span><span class="n">SimpleExec</span><span class="p">)</span> <span class="n">executeBegin</span><span class="p">(</span><span class="n">ctx</span> <span class="n">context</span><span class="o">.</span><span class="n">Context</span><span class="p">,</span> <span class="n">s</span> <span class="o">*</span><span class="n">ast</span><span class="o">.</span><span class="n">BeginStmt</span><span class="p">)</span> <span class="kt">error</span> <span class="p">{</span>
+	<span class="c">// ...</span>
+
+	<span class="n">e</span><span class="o">.</span><span class="n">ctx</span><span class="o">.</span><span class="n">GetSessionVars</span><span class="p">()</span><span class="o">.</span><span class="n">StmtCtx</span><span class="o">.</span><span class="n">AppendNote</span><span class="p">(</span><span class="n">errors</span><span class="o">.</span><span class="n">New</span><span class="p">(</span><span class="s">"hello transaction"</span><span class="p">))</span>
+
+	<span class="c">// ...</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>从当前执行器中获取语句 Context 然后在其中追加一句 Note，这样就可以在 begin 语句执行之后，在 warnings 中找到这个 Note.
+启动集群尝试执行一个事务：</p>
+
+<div class="language-sh highlighter-rouge"><div class="highlight"><pre class="highlight"><code>➜  ~ mysql <span class="nt">--host</span> 127.0.0.1 <span class="nt">--port</span> 4000 <span class="nt">-u</span> root
+
+mysql&gt; use <span class="nb">test</span><span class="p">;</span>
+Database changed
+mysql&gt; begin<span class="p">;</span>
+Query OK, 0 rows affected, 1 warning <span class="o">(</span>0.00 sec<span class="o">)</span>
+
+mysql&gt; show warnings<span class="p">;</span>
++-------+------+-------------------+
+| Level | Code | Message           |
++-------+------+-------------------+
+| Note  | 1105 | hello transaction |
++-------+------+-------------------+
+1 row <span class="k">in </span><span class="nb">set</span> <span class="o">(</span>0.00 sec<span class="o">)</span>
+</code></pre></div></div>
+
+<p>这样我们就实现了在事务 begin 语句执行后输出一句 <code class="language-plaintext highlighter-rouge">hello transation</code>.</p>
+
+<h3 id="输出到日志">输出到日志</h3>
+
+<p>后来题目改了要求，需要将 <code class="language-plaintext highlighter-rouge">hell transation</code> 输出到日志当中。输出到日志当中也十分简单，可以同样在 <code class="language-plaintext highlighter-rouge">simple.go</code> 的 <strong>executeRollback</strong>
+找到如何打印日志的例子：</p>
+
+<div class="language-go highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c">// FILE: tidb/executor/simple.go</span>
+
+<span class="k">func</span> <span class="p">(</span><span class="n">e</span> <span class="o">*</span><span class="n">SimpleExec</span><span class="p">)</span> <span class="n">executeRollback</span><span class="p">(</span><span class="n">s</span> <span class="o">*</span><span class="n">ast</span><span class="o">.</span><span class="n">RollbackStmt</span><span class="p">)</span> <span class="kt">error</span> <span class="p">{</span>
+	<span class="c">// ...</span>
+
+	<span class="n">logutil</span><span class="o">.</span><span class="n">BgLogger</span><span class="p">()</span><span class="o">.</span><span class="n">Debug</span><span class="p">(</span><span class="s">"execute rollback statement"</span><span class="p">,</span> <span class="n">zap</span><span class="o">.</span><span class="n">Uint64</span><span class="p">(</span><span class="s">"conn"</span><span class="p">,</span> <span class="n">sessVars</span><span class="o">.</span><span class="n">ConnectionID</span><span class="p">))</span>
+
+    <span class="c">// ...</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>我们也可以在 <strong>executeBegin</strong> 中尝试添加日志：</p>
+
+<div class="language-go highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c">// FILE: tidb/executor/simple.go</span>
+
+<span class="k">func</span> <span class="p">(</span><span class="n">e</span> <span class="o">*</span><span class="n">SimpleExec</span><span class="p">)</span> <span class="n">executeBegin</span><span class="p">(</span><span class="n">ctx</span> <span class="n">context</span><span class="o">.</span><span class="n">Context</span><span class="p">,</span> <span class="n">s</span> <span class="o">*</span><span class="n">ast</span><span class="o">.</span><span class="n">BeginStmt</span><span class="p">)</span> <span class="kt">error</span> <span class="p">{</span>
+	<span class="c">// ...</span>
+
+	<span class="n">logutil</span><span class="o">.</span><span class="n">BgLogger</span><span class="p">()</span><span class="o">.</span><span class="n">Info</span><span class="p">(</span><span class="s">"hello transaction"</span><span class="p">)</span>
+
+	<span class="c">// ...</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>再次提交事务测试后，可以去 <code class="language-plaintext highlighter-rouge">.tiup</code> 目录中找到该日志：</p>
+
+<div class="language-sh highlighter-rouge"><div class="highlight"><pre class="highlight"><code>➜  tidb-0 <span class="nb">pwd</span>
+/Users/rustin/.tiup/data/SA3l5r6/tidb-0
+➜  tidb-0 less tidb.log
+<span class="c"># 搜索 hello 找到日志</span>
+<span class="o">[</span>2020/09/09 11:51:23.426 +08:00] <span class="o">[</span>INFO] <span class="o">[</span>simple.go:584] <span class="o">[</span><span class="s2">"hello transaction"</span><span class="o">]</span>
+</code></pre></div></div>
+
+<p>这样就输出了 <code class="language-plaintext highlighter-rouge">hello transaction</code> 到日志中。</p>
+
+<p>到这基本上就算是完成了实验，<strong>但是整个实验中忽略了自动提交的情况</strong>。目前最大的收获是学会了用 <code class="language-plaintext highlighter-rouge">TiUP</code> 快速的部署和搭建本地的测试环境。</p>
+
+<h3 id="参考链接">参考链接</h3>
+
+<p><a href="https://pingcap.com/blog-cn/tidb-internal-1/">三篇文章了解 TiDB 技术内幕 - 说存储</a></p>
+
+<p><a href="https://pingcap.com/blog-cn/tidb-internal-2/">三篇文章了解 TiDB 技术内幕 - 说计算</a></p>
+
+<p><a href="https://pingcap.com/blog-cn/tidb-internal-3/">三篇文章了解 TiDB 技术内幕 - 谈调度</a></p>
+
+<p><a href="https://book.tidb.io/">TiDB In Action: based on 4.0</a></p>
+
+<h3 id="文章链接">文章链接</h3>
+
+<p>文章首发于： <a href="https://rustin.me/">Rustin 的博客</a></p>
+
+<p>同步更新：</p>
+
+<p><a href="">知乎</a></p>
+
+<p><a href="">简书</a></p>
+
+<p><a href="">掘金</a></p>
+
+<p><a href="">segmentfault</a></p>
+
+
+    <p class="signature">&mdash; Rustin</p>
+  </div>
+  <script>
+    (function () {
+      anchors.options.placement = 'right';
+      anchors.add('.content > h3, .content > h4, .content > h5, .content > h6');
+    })();
+  </script>
+  <script src="https://giscus.app/client.js" data-repo="Rustin170506/blog"
+    data-repo-id="MDEwOlJlcG9zaXRvcnkyMTU4MDI0NDg=" data-category="Ideas" data-category-id="DIC_kwDODNziUM4CY_bg"
+    data-mapping="title" data-strict="0" data-reactions-enabled="1" data-emit-metadata="0" data-input-position="top"
+    data-theme="light" data-lang="en" data-loading="lazy" crossorigin="anonymous" async>
+    </script>
+</body>
+
+</html>

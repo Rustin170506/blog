@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>从 pingcap tidb 学习使用静态检查工具提升代码质量 - Rustin</title>
+  <link rel="stylesheet" href="https://netdna.bootstrapcdn.com/bootstrap/3.1.1/css/bootstrap.min.css" type="text/css">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Merriweather+Sans:400,300,700" type="text/css">
+  <link rel="stylesheet" href="/static/app.css" type="text/css">
+  <link rel="stylesheet" href="/static/syntax.css" type="text/css">
+  <link type="application/atom+xml" rel="alternate" href="http://localhost:4000/feed.xml" />
+  <meta name="theme-color" content="#111111">
+
+  <meta name="og:type" content="article">
+  <meta name="og:title" content="从 pingcap tidb 学习使用静态检查工具提升代码质量 – Rustin">
+  <meta name="og:description" content="">
+  <meta name="og:site_name" content="Rustin">
+  <meta name="og:url" content="http://localhost:4000/%E4%BB%8E-pingcap-tidb-%E5%AD%A6%E4%B9%A0%E4%BD%BF%E7%94%A8%E9%9D%99%E6%80%81%E6%A3%80%E6%9F%A5%E5%B7%A5%E5%85%B7%E6%8F%90%E5%8D%87%E4%BB%A3%E7%A0%81%E8%B4%A8%E9%87%8F/">
+  
+  <meta name="og:image" content="http://localhost:4000/static/default_image.jpg">
+  
+  <meta property="article:published_time" content=" 2020-04-25">
+
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:site" content="@hi_rustin">
+  <meta name="twitter:domain" content="rustin.me">
+  <meta name="twitter:title" content="从 pingcap tidb 学习使用静态检查工具提升代码质量 – Rustin">
+  <meta name="twitter:description" content="">
+  
+  <meta name="twitter:image" content="http://localhost:4000/static/default_image.jpg">
+  
+  <meta name="twitter:url" content="http://localhost:4000/%E4%BB%8E-pingcap-tidb-%E5%AD%A6%E4%B9%A0%E4%BD%BF%E7%94%A8%E9%9D%99%E6%80%81%E6%A3%80%E6%9F%A5%E5%B7%A5%E5%85%B7%E6%8F%90%E5%8D%87%E4%BB%A3%E7%A0%81%E8%B4%A8%E9%87%8F/">
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/anchor-js/3.2.0/anchor.min.js"></script>
+</head>
+
+<body>
+  <header>
+    <h1><a href="/">Rustin</a></h1>
+    <span>I’m a passionate software engineer who specializes in distributed systems and dev tools.</span>
+  </header>
+
+  <div class="content post">
+    <h2>从 pingcap tidb 学习使用静态检查工具提升代码质量</h2>
+    <p class="date">25 April 2020</p>
+
+    <p>大家好，我是 <a href="https://github.com/Rustin170506">Rustin</a> 。今天想跟大家简单介绍一下如何使用一些 golang 的静态代码检查工具来提升代码质量！</p>
+
+<p>此博客在 <a href="https://github.com/Rustin170506/blog">GitHub</a> 上公开发布. 如果您有任何问题或疑问，请在此处打开一个 <a href="https://github.com/Rustin170506/blog/issues">issue</a>。</p>
+
+<h2 id="简介">简介</h2>
+
+<p>从去年接触到 TiDB 就开始尝试在社区帮忙修复一些简单的 Bug。最近，我在阅读代码的过程中发现 TiDB 的代码库中有大量的没有必要的类型转换，我就用 GoLand 分析检查出大部分的无效的类型转化，
+然后提了一个 <a href="https://github.com/pingcap/tidb/pull/16262">PR</a> （CEO 半夜 review 代码，哈哈哈）修复。在这个 PR 中 <a href="https://github.com/zz-jason">zz-jason 大神</a> 评论希望能够通过静态检查工具来检测无效的类型转换。</p>
+
+<p>我经过一些研究，决定使用 <a href="https://github.com/mdempsky/unconvert">unconvert</a> 来检测无效的类型转换，然后在这个 <a href="https://github.com/pingcap/tidb/pull/16549">PR</a> 解决了这个问题。
+<strong>最近我终于有机会在公司写 Go了，所以我也想在公司的项目上配置和使用一些静态检查工具来提升代码质量。</strong> 在经过一下午的努力之后终于把 TiDB 的大部分检查工具移植到了公司项目上，并且在 github 上创建了一个模板项目
+<a href="https://github.com/Rustin170506/go-boilerplate">go-boilerplate</a> 。下面我就简单介绍一下这个模板的构建过程和使用的方式。</p>
+
+<h2 id="init-项目添加代码">init 项目，添加代码</h2>
+
+<p>我最近使用的 Go 版本 1.13.8，所以就使用 go mod 来初始化和管理项目。</p>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code> go mod init github.com/Rustin170506/go-boilerplate
+</code></pre></div></div>
+
+<p>然后我添加了 main 文件和一个用作例子的 foo 文件，目录结构如下所示：</p>
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>.
+├── foo.go
+├── foo_test.go
+├── go.mod
+├── go.sum
+├── LICENSE
+├── main.go
+├── Makefile
+├── README.md
+</code></pre></div></div>
+
+<p>我在 main 文件中只是简单的输出一句话：</p>
+
+<div class="language-go highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c">// main.go</span>
+<span class="k">package</span> <span class="n">main</span>
+
+<span class="k">import</span> <span class="p">(</span>
+	<span class="s">"fmt"</span>
+<span class="p">)</span>
+
+<span class="k">func</span> <span class="n">main</span><span class="p">()</span> <span class="p">{</span>
+	<span class="n">fmt</span><span class="o">.</span><span class="n">Println</span><span class="p">(</span><span class="s">"I love Rust!"</span><span class="p">)</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>在 foo 函数我为了测试 go tidy 功能，专门引入了一个第三方的随机生成测试数据的库：go get github.com/Pallinder/go-randomdata。在代码中简单的生成一个随机数并测试：</p>
+
+<div class="language-go highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c">// foo.go</span>
+<span class="k">package</span> <span class="n">main</span>
+
+<span class="k">import</span> <span class="p">(</span>
+	<span class="s">"github.com/Pallinder/go-randomdata"</span>
+<span class="p">)</span>
+
+<span class="k">func</span> <span class="n">foo</span><span class="p">()</span> <span class="kt">int</span> <span class="p">{</span>
+	<span class="k">return</span> <span class="n">randomdata</span><span class="o">.</span><span class="n">Number</span><span class="p">(</span><span class="m">20</span><span class="p">)</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<div class="language-go highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c">// foo_test.go</span>
+<span class="k">package</span> <span class="n">main</span>
+
+<span class="k">import</span> <span class="s">"testing"</span>
+
+<span class="k">func</span> <span class="n">TestFoo</span><span class="p">(</span><span class="n">t</span> <span class="o">*</span><span class="n">testing</span><span class="o">.</span><span class="n">T</span><span class="p">)</span> <span class="p">{</span>
+	<span class="n">testFoo</span> <span class="o">:=</span> <span class="n">foo</span><span class="p">()</span>
+	<span class="k">if</span> <span class="n">testFoo</span> <span class="o">&lt;</span> <span class="m">0</span> <span class="o">||</span> <span class="n">testFoo</span> <span class="o">&gt;</span> <span class="m">20</span> <span class="p">{</span>
+		<span class="n">t</span><span class="o">.</span><span class="n">Error</span><span class="p">(</span><span class="s">"The value should more than 0 and less than 20!"</span><span class="p">)</span>
+	<span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<h2 id="添加-makefile开始构建">添加 Makefile，开始构建</h2>
+
+<p>在初始化完项目之后，我们需要添加一个 Makefile 来构建项目，我接下来所有的检查工具都是通过 Makefile 来组织和构建的。在 Makefile 中我们要先定义一些基础的通用的变量：</p>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code># 定义项目名称
+PROJECT=go-boilerplate
+GOPATH ?= $(shell go env GOPATH)
+P=8
+
+# 确保 GOPATH 已经设置好了
+ifeq "$(GOPATH)" ""
+  $(error Please set the environment variable GOPATH before running `make`)
+endif
+# 校验输出是否正常。
+FAIL_ON_STDOUT := awk '{ print } END { if (NR &gt; 0) { exit 1 } }'
+# 设置环境变量
+path_to_add := $(addsuffix /bin,$(subst :,/bin:,$(GOPATH))):$(PWD)/tools/bin
+export PATH := $(path_to_add):$(PATH)
+# 一些 Go 相关的命令
+GO              := GO111MODULE=on go
+GOBUILD         := $(GO) build $(BUILD_FLAG) -tags codes
+GOTEST          := $(GO) test -p $(P)
+
+# 获取项目的包和包中的文件
+PACKAGE_LIST  := go list ./...
+PACKAGES  := $$($(PACKAGE_LIST))
+PACKAGE_DIRECTORIES := $(PACKAGE_LIST) | sed 's|github.com/Rustin170506/$(PROJECT)||'
+FILES     := $$(find $$($(PACKAGE_DIRECTORIES)) -name "*.go")
+</code></pre></div></div>
+
+<p>这些通用的变量中有两个地方需要注意：</p>
+<ul>
+  <li>我们定义了一个 FAIL_ON_STDOUT 的 <a href="https://zh.wikipedia.org/zh-hans/AWK">awk</a> 命令，该命令会检测是否有错误信息输出，我们在后面会多次使用到该命令。NR 是内置的变量表示 number of record。如果我们检测到其他输出信息就失败退出（<strong>输出信息也就是错误信息，我们会做输出重定向</strong>）。</li>
+  <li>我们匹配和查找出了包下的所有 go 文件，因为我这只是个简单的模板项目没有其他的 package，所以我在 <a href="https://zh.wikipedia.org/wiki/Sed">sed</a> 中只替换和匹配了第一层 package：<code class="language-plaintext highlighter-rouge">sed 's|github.com/Rustin170506/$(PROJECT)||'</code>。如果你有很多子 package，就需要修改这个替换规则。</li>
+</ul>
+
+<h2 id="添加工具创建命令">添加工具，创建命令</h2>
+
+<p>我们需要用 go get 获取静态检查工具，但是为了不污染我们项目的依赖（因为我们在代码中实际上并没有用到这些包），我们可以创建一个 tools/check 的目录并且在其中创建一个 mod 来管理这些静态检查工具。</p>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nb">mkdir </span>tools/check
+<span class="nb">cd </span>tools/check
+go mod init github.com/Rustin170506/go-boilerplate/_tools
+</code></pre></div></div>
+<p>初始化 tools 模块之后目录结构如下：</p>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>.
+├── foo.go
+├── foo_test.go
+├── go.mod
+├── go.sum
+├── LICENSE
+├── main.go
+├── Makefile
+├── README.md
+└── tools
+    └── check
+        └── go.mod
+</code></pre></div></div>
+
+<p>有了该模块，我们就可以将工具直接编译到其目录下来使用。下面我就开始介绍目前我的模板项目中用到的一些很有帮助的检查工具：</p>
+
+<p>1.gofmt</p>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>fmt:
+	@echo "gofmt (simplify)"
+	@gofmt -s -l -w $(FILES) 2&gt;&amp;1 | $(FAIL_ON_STDOUT)
+</code></pre></div></div>
+
+<p>首先就是 Go 自带的 fmt 检查代码格式并输出错误，<strong>通过 2&gt;&amp;1 将标准错误输出重定向到标准输出</strong>，然后利用我们上面定义的 FAIL_ON_STDOUT 命令来检测结果。</p>
+
+<p>2.<a href="https://github.com/chzchzchz/goword">goword</a></p>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code># 编译到 tool/bin 目录下以供使用
+tools/bin/goword: tools/check/go.mod
+	cd tools/check; \
+	$(GO) build -o ../bin/goword github.com/chzchzchz/goword
+
+# 先调用上面的编译命令，再调用进行检测
+goword:tools/bin/goword
+	tools/bin/goword $(FILES) 2&gt;&amp;1 | $(FAIL_ON_STDOUT)
+</code></pre></div></div>
+
+<p>该工具主要是检测你代码中 godoc 函数注释的拼写错误，在这里我们检测了包下的所有文件。</p>
+
+<p>3.<a href="https://github.com/securego/gosec">gosec</a></p>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code># 编译到 tool/bin 目录下以供使用
+tools/bin/gosec: tools/check/go.mod
+	cd tools/check; \
+	$(GO) build -o ../bin/gosec github.com/securego/gosec/cmd/gosec
+
+# 先调用上面的编译命令，再调用进行检测
+gosec:tools/bin/gosec
+	tools/bin/gosec ./...
+</code></pre></div></div>
+
+<p>该工具主要是检测你代码中可能的安全问题，在这里我们使用了 ./.. 匹配所有文件。</p>
+
+<p>4.<a href="https://github.com/golangci/golangci-lint">golangci-lint</a></p>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code># 使用官方提供的安装脚本安装
+tools/bin/golangci-lint:
+	curl -sfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh| sh -s -- -b ./tools/bin v1.21.0
+
+# 先调用上面的安装命令，再调用进行检测
+check-static: tools/bin/golangci-lint
+	tools/bin/golangci-lint run -v --disable-all --deadline=3m \
+	  --enable=misspell \
+	  --enable=ineffassign \
+	  $$($(PACKAGE_DIRECTORIES))
+</code></pre></div></div>
+
+<p>该工具非常强大并且它是插件化的，可以集成使用很多其他的检查工具，在这里我们用 <code class="language-plaintext highlighter-rouge">--disable-all</code> 先关掉了所有的插件，然后用 <code class="language-plaintext highlighter-rouge">--enable=misspell --enable=ineffassign</code> 只打开这两个检测工具去检测拼写错误和无效的变量分配和赋值。</p>
+
+<p>这个工具实际上能集成几乎所有的静态检查工具，而且还可以做 CI 支持。<strong>如果你的项目足够复杂建议直接启用所有插件，使用这一个工具就能搞定大部分问题。</strong></p>
+
+<p>5.<a href="https://github.com/kisielk/errcheck">errcheck</a></p>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code># 编译到 tool/bin 目录下以供使用
+tools/bin/errcheck: tools/check/go.mod
+	cd tools/check; \
+	$(GO) build -o ../bin/errcheck github.com/kisielk/errcheck
+
+# 先调用上面的编译命令，再调用进行检测
+errcheck:tools/bin/errcheck
+	@echo "errcheck"
+	@GO111MODULE=on tools/bin/errcheck -exclude ./tools/check/errcheck_excludes.txt -ignoretests -blank $(PACKAGES)
+</code></pre></div></div>
+<p>该工具主要是做错误处理的检测，强制要求你处理错误。可以看到我们在命令参数中还排除了一些错误处理的检测。<strong>如果有些错误你不想处理即可将其放入其中。注意我们在这里检测的是 PACKAGES。</strong></p>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code># errcheck_excludes.txt
+
+fmt.Fprintf
+fmt.Fprint
+fmt.Sscanf
+
+</code></pre></div></div>
+
+<p>6.<a href="https://github.com/mdempsky/unconvert">unconvert</a></p>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code># 编译到 tool/bin 目录下以供使用
+tools/bin/unconvert: tools/check/go.mod
+	cd tools/check; \
+	$(GO) build -o ../bin/unconvert github.com/mdempsky/unconvert
+
+# 先调用上面的编译命令，再调用进行检测
+unconvert:tools/bin/unconvert
+	@echo "unconvert check"
+	@GO111MODULE=on tools/bin/unconvert ./...
+</code></pre></div></div>
+
+<p>这就是我给 TiDB 添加用于检测无效类型转换的工具。</p>
+
+<p>7.<a href="https://github.com/mgechev/revive">revive</a></p>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code># 编译到 tool/bin 目录下以供使用
+tools/bin/revive: tools/check/go.mod
+	cd tools/check; \
+	$(GO) build -o ../bin/revive github.com/mgechev/revive
+
+# 先调用上面的编译命令，再调用进行检测
+lint:tools/bin/revive
+	@echo "linting"
+	@tools/bin/revive -formatter friendly -config tools/check/revive.toml $(FILES)
+</code></pre></div></div>
+
+<p>该工具是一个代码风格格式化工具，可以看到我们定义了一个 revite.toml 规则文件来确定标准。在这里我们检测了所有文件。</p>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code># revive.toml
+
+ignoreGeneratedHeader = false
+severity = "error"
+confidence = 0.8
+errorCode = -1
+warningCode = -1
+
+[rule.blank-imports]
+[rule.context-as-argument]
+[rule.dot-imports]
+[rule.error-return]
+[rule.error-strings]
+[rule.error-naming]
+[rule.exported]
+[rule.if-return]
+[rule.var-naming]
+[rule.package-comments]
+[rule.range]
+[rule.receiver-naming]
+[rule.indent-error-flow]
+[rule.superfluous-else]
+[rule.modifies-parameter]
+[rule.unreachable-code]
+</code></pre></div></div>
+
+<p>8.evt</p>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>vet:
+	@echo "vet"
+	$(GO) vet -all $(PACKAGES) 2&gt;&amp;1 | $(FAIL_ON_STDOUT)
+</code></pre></div></div>
+<p>我们也使用 Go 自带的检测工具来检测一些语法错误。</p>
+
+<p>9.<a href="https://github.com/dominikh/go-tools">staticcheck</a></p>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code># 编译到 tool/bin 目录下以供使用
+tools/bin/staticcheck: tools/check/go.mod
+	cd tools/check; \
+	$(GO) build -o ../bin/staticcheck honnef.co/go/tools/cmd/staticcheck
+
+# 先调用上面的编译命令，再调用进行检测
+staticcheck:tools/bin/staticcheck
+	@echo "static checking"
+	@GO111MODULE=on tools/bin/staticcheck ./...
+</code></pre></div></div>
+
+<p>该工具主要检测一些无用代码和变量，并且会提供一些简化和优化代码的建议。</p>
+
+<p>10.tidy</p>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>tidy:
+	@echo "go mod tidy"
+	./tools/check/check-tidy.sh
+</code></pre></div></div>
+
+<p>我们也利用 Go 自带的 tidy 功能来防止依赖被污染，我们创建了一个脚本来检测依赖是否正常：</p>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nb">set</span> <span class="nt">-euo</span> pipefail
+
+<span class="c"># go mod tidy do not support symlink</span>
+<span class="nb">cd</span> <span class="nt">-P</span> <span class="nb">.</span>
+
+<span class="nb">cp </span>go.sum /tmp/go.sum.before
+<span class="nv">GO111MODULE</span><span class="o">=</span>on go mod tidy
+diff <span class="nt">-q</span> go.sum /tmp/go.sum.before
+</code></pre></div></div>
+
+<p><strong>该脚本会执行 <a href="https://golang.org/cmd/go/">tidy</a> 命令并且和你原来的 sum 文件比较。</strong> 我编写 foo 函数时引入第三方库就是为了测试该脚本。</p>
+
+<p>最终的目录结构：</p>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>.
+├── foo.go
+├── foo_test.go
+├── go.mod
+├── go.sum
+├── LICENSE
+├── main.go
+├── Makefile
+├── README.md
+└── tools
+    ├── bin
+    │   ├── errcheck
+    │   ├── golangci-lint
+    │   ├── gosec
+    │   ├── goword
+    │   ├── revive
+    │   ├── staticcheck
+    │   └── unconvert
+    └── check
+        ├── check-tidy.sh
+        ├── errcheck_excludes.txt
+        ├── go.mod
+        ├── go.sum
+        └── revive.toml
+</code></pre></div></div>
+
+<h2 id="整合命令快速检测">整合命令，快速检测</h2>
+
+<p>在上面我们定义好了编译和检测的命令，你可以在这里找到完整的 <a href="https://github.com/Rustin170506/go-boilerplate/blob/master/Makefile">Makefile</a> 文件。</p>
+
+<p>除了检查的命令，我们也可以定义一些常用的开发命令：</p>
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code># 构建
+build:
+	$(GOBUILD)
+# 清理
+clean:
+	$(GO) clean -i ./...
+	rm -rf *.out
+# 测试
+test:
+	$(GOTEST)
+	@&gt;&amp;2 echo "Great, all tests passed."
+</code></pre></div></div>
+
+<p>现在我们所有的命令都就绪了，就可以开始封装整合命令：</p>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>dev: check test
+
+check: fmt errcheck unconvert lint tidy check-static vet staticcheck goword
+</code></pre></div></div>
+
+<p>我们整合出了两个命令，一个是 check 它会执行所有的检测任务，另外一个是 dev 它不仅可以进行检查还跑了单元测试。我们在开发完成之后就可以进行检测并提交，甚至将其作为 CI 任务运行。</p>
+
+<p><strong>到此为止，我们就基本完善了项目的静态检查工具链。该项目在 github 整理作为 <a href="https://github.com/Rustin170506/go-boilerplate">template 项目</a> 开源，大家可以直接使用 <a href="https://github.com/Rustin170506/go-boilerplate/generate">github template</a> 功能初始化你的项目。</strong>
+希望这篇文章对你集成静态代码分析工具有帮助！</p>
+
+<hr />
+
+<h3 id="参考链接">参考链接</h3>
+<p><a href="https://github.com/pingcap/tidb">tidb</a></p>
+
+<h3 id="文章链接">文章链接</h3>
+
+<p>文章首发于： <a href="https://rustin.me/">Rustin 的博客</a></p>
+
+<p>同步更新：</p>
+
+<p><a href="">知乎</a></p>
+
+<p><a href="">简书</a></p>
+
+<p><a href="">掘金</a></p>
+
+<p><a href="">segmentfault</a></p>
+
+
+    <p class="signature">&mdash; Rustin</p>
+  </div>
+  <script>
+    (function () {
+      anchors.options.placement = 'right';
+      anchors.add('.content > h3, .content > h4, .content > h5, .content > h6');
+    })();
+  </script>
+  <script src="https://giscus.app/client.js" data-repo="Rustin170506/blog"
+    data-repo-id="MDEwOlJlcG9zaXRvcnkyMTU4MDI0NDg=" data-category="Ideas" data-category-id="DIC_kwDODNziUM4CY_bg"
+    data-mapping="title" data-strict="0" data-reactions-enabled="1" data-emit-metadata="0" data-input-position="top"
+    data-theme="light" data-lang="en" data-loading="lazy" crossorigin="anonymous" async>
+    </script>
+</body>
+
+</html>

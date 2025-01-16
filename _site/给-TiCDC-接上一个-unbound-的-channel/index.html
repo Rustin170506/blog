@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>给 TiCDC 接上一个 unbound 的 channel - Rustin</title>
+  <link rel="stylesheet" href="https://netdna.bootstrapcdn.com/bootstrap/3.1.1/css/bootstrap.min.css" type="text/css">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Merriweather+Sans:400,300,700" type="text/css">
+  <link rel="stylesheet" href="/static/app.css" type="text/css">
+  <link rel="stylesheet" href="/static/syntax.css" type="text/css">
+  <link type="application/atom+xml" rel="alternate" href="http://localhost:4000/feed.xml" />
+  <meta name="theme-color" content="#111111">
+
+  <meta name="og:type" content="article">
+  <meta name="og:title" content="给 TiCDC 接上一个 unbound 的 channel – Rustin">
+  <meta name="og:description" content="">
+  <meta name="og:site_name" content="Rustin">
+  <meta name="og:url" content="http://localhost:4000/%E7%BB%99-TiCDC-%E6%8E%A5%E4%B8%8A%E4%B8%80%E4%B8%AA-unbound-%E7%9A%84-channel/">
+  
+  <meta name="og:image" content="http://localhost:4000/static/default_image.jpg">
+  
+  <meta property="article:published_time" content=" 2022-07-10">
+
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:site" content="@hi_rustin">
+  <meta name="twitter:domain" content="rustin.me">
+  <meta name="twitter:title" content="给 TiCDC 接上一个 unbound 的 channel – Rustin">
+  <meta name="twitter:description" content="">
+  
+  <meta name="twitter:image" content="http://localhost:4000/static/default_image.jpg">
+  
+  <meta name="twitter:url" content="http://localhost:4000/%E7%BB%99-TiCDC-%E6%8E%A5%E4%B8%8A%E4%B8%80%E4%B8%AA-unbound-%E7%9A%84-channel/">
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/anchor-js/3.2.0/anchor.min.js"></script>
+</head>
+
+<body>
+  <header>
+    <h1><a href="/">Rustin</a></h1>
+    <span>I’m a passionate software engineer who specializes in distributed systems and dev tools.</span>
+  </header>
+
+  <div class="content post">
+    <h2>给 TiCDC 接上一个 unbound 的 channel</h2>
+    <p class="date">10 July 2022</p>
+
+    <p>最近在改造 <a href="https://github.com/pingcap/tiflow">TiCDC</a> 的 <a href="https://ticdc-sink.slides.rustin.me/">Sink</a> 组件时需要为 <a href="https://en.wikipedia.org/wiki/Message_queue">MQ</a> 类型的 Sink 接上一个 unbound 的 <a href="https://go.dev/tour/concurrency/2">channel</a>。
+在搜索过程中发现了一个项目叫做 <a href="https://github.com/golang-design/chann">chann</a>，它是一个接口统一并且支持范型的 channel。</p>
+
+<p>虽然这个库看上去实现很简单，但是我在实际使用过程中并不是很顺利。下面我就介绍一下我在使用该库时遇到的问题和进行的思考。</p>
+
+<p>此博客在 <a href="https://github.com/Rustin170506/rustin.me">GitHub</a> 上公开发布。 如果您有任何问题或疑问，请在此处打开一个 <a href="https://github.com/Rustin170506/rustin.me/issues">issue</a>。</p>
+
+<h2 id="简介">简介</h2>
+<p>该库由 golang 社区非常活跃的 <a href="https://github.com/changkun">changkun</a> 编写，托管在他组建的 <a href="https://github.com/golang-design">golang-design</a> 组织下。</p>
+
+<p>它提供了统一的接口来创建不同类型的 channel，并且支持范型：</p>
+<div class="language-go highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">ch</span> <span class="o">:=</span> <span class="n">chann</span><span class="o">.</span><span class="n">New</span><span class="p">[</span><span class="kt">int</span><span class="p">]()</span>                  <span class="c">// 无界限, 无容量限制</span>
+<span class="n">ch</span> <span class="o">:=</span> <span class="n">chann</span><span class="o">.</span><span class="n">New</span><span class="p">[</span><span class="k">func</span><span class="p">()](</span><span class="n">chann</span><span class="o">.</span><span class="n">Cap</span><span class="p">(</span><span class="m">0</span><span class="p">))</span>   <span class="c">// 没有缓存, 容量为 0</span>
+<span class="n">ch</span> <span class="o">:=</span> <span class="n">chann</span><span class="o">.</span><span class="n">New</span><span class="p">[</span><span class="kt">string</span><span class="p">](</span><span class="n">chann</span><span class="o">.</span><span class="n">Cap</span><span class="p">(</span><span class="m">100</span><span class="p">))</span> <span class="c">// 有缓存，容量为 100</span>
+</code></pre></div></div>
+
+<p>它的发送和接收操作和原生 channel 一致：</p>
+<div class="language-go highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">ch</span><span class="o">.</span><span class="n">In</span><span class="p">()</span> <span class="o">&lt;-</span> <span class="m">42</span>
+<span class="nb">println</span><span class="p">(</span><span class="o">&lt;-</span><span class="n">ch</span><span class="o">.</span><span class="n">Out</span><span class="p">())</span> <span class="c">// 42</span>
+</code></pre></div></div>
+
+<p>它的关闭接口为：</p>
+<div class="language-go highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">ch</span><span class="o">.</span><span class="n">Close</span><span class="p">()</span>
+</code></pre></div></div>
+
+<p>从接口来看，它几乎能无缝的接入到我当前的项目当中，这也是我选择它的原因。</p>
+
+<h2 id="源码阅读">源码阅读</h2>
+<p>在开始分析我遇到的问题之前，我们需要先深入阅读一下源码。它的源码不是很长，并且我主要是用的是无界限的 chann，所以下面就着重看一下无界限的 chann 的源码。</p>
+
+<div class="language-go highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">type</span> <span class="n">Chann</span><span class="p">[</span><span class="n">T</span> <span class="n">any</span><span class="p">]</span> <span class="k">struct</span> <span class="p">{</span>
+	<span class="n">in</span><span class="p">,</span> <span class="n">out</span> <span class="k">chan</span> <span class="n">T</span>
+	<span class="nb">close</span>   <span class="k">chan</span> <span class="k">struct</span><span class="p">{}</span>
+	<span class="n">cfg</span>     <span class="o">*</span><span class="n">config</span>
+	<span class="n">q</span>       <span class="p">[]</span><span class="n">T</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>Chann 是一个范型结构体，它里面维护了 <code class="language-plaintext highlighter-rouge">in</code> 和 <code class="language-plaintext highlighter-rouge">out</code> channel，这就是我们能使用原生 channel 语法操作 chann 的入口和出口。</p>
+
+<p>另外一个比较关键的字段是 <code class="language-plaintext highlighter-rouge">q</code>，它将负责存储 chann 的缓存。</p>
+
+<p>它的构造方法：</p>
+<div class="language-go highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">type</span> <span class="n">config</span> <span class="k">struct</span> <span class="p">{</span>
+	<span class="n">typ</span>      <span class="n">chanType</span>
+	<span class="nb">len</span><span class="p">,</span> <span class="nb">cap</span> <span class="kt">int64</span>
+<span class="p">}</span>
+
+<span class="k">type</span> <span class="n">Opt</span> <span class="k">func</span><span class="p">(</span><span class="o">*</span><span class="n">config</span><span class="p">)</span>
+
+<span class="k">func</span> <span class="n">New</span><span class="p">[</span><span class="n">T</span> <span class="n">any</span><span class="p">](</span><span class="n">opts</span> <span class="o">...</span><span class="n">Opt</span><span class="p">)</span> <span class="o">*</span><span class="n">Chann</span><span class="p">[</span><span class="n">T</span><span class="p">]</span> <span class="p">{</span>
+	<span class="n">cfg</span> <span class="o">:=</span> <span class="o">&amp;</span><span class="n">config</span><span class="p">{</span>
+		<span class="nb">cap</span><span class="o">:</span> <span class="o">-</span><span class="m">1</span><span class="p">,</span> <span class="nb">len</span><span class="o">:</span> <span class="m">0</span><span class="p">,</span>
+		<span class="n">typ</span><span class="o">:</span> <span class="n">unbounded</span><span class="p">,</span>
+	<span class="p">}</span>
+
+	<span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">opts</span><span class="p">)</span> <span class="o">&gt;</span> <span class="m">1</span> <span class="p">{</span>
+		<span class="nb">panic</span><span class="p">(</span><span class="s">"chann: too many arguments"</span><span class="p">)</span>
+	<span class="p">}</span>
+	<span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">o</span> <span class="o">:=</span> <span class="k">range</span> <span class="n">opts</span> <span class="p">{</span>
+		<span class="n">o</span><span class="p">(</span><span class="n">cfg</span><span class="p">)</span>
+	<span class="p">}</span>
+	<span class="n">ch</span> <span class="o">:=</span> <span class="o">&amp;</span><span class="n">Chann</span><span class="p">[</span><span class="n">T</span><span class="p">]{</span><span class="n">cfg</span><span class="o">:</span> <span class="n">cfg</span><span class="p">,</span> <span class="nb">close</span><span class="o">:</span> <span class="nb">make</span><span class="p">(</span><span class="k">chan</span> <span class="k">struct</span><span class="p">{})}</span>
+	<span class="k">switch</span> <span class="n">ch</span><span class="o">.</span><span class="n">cfg</span><span class="o">.</span><span class="n">typ</span> <span class="p">{</span>
+	<span class="k">case</span> <span class="n">unbuffered</span><span class="o">:</span>
+		<span class="n">ch</span><span class="o">.</span><span class="n">in</span> <span class="o">=</span> <span class="nb">make</span><span class="p">(</span><span class="k">chan</span> <span class="n">T</span><span class="p">)</span>
+		<span class="n">ch</span><span class="o">.</span><span class="n">out</span> <span class="o">=</span> <span class="n">ch</span><span class="o">.</span><span class="n">in</span>
+	<span class="k">case</span> <span class="n">buffered</span><span class="o">:</span>
+		<span class="n">ch</span><span class="o">.</span><span class="n">in</span> <span class="o">=</span> <span class="nb">make</span><span class="p">(</span><span class="k">chan</span> <span class="n">T</span><span class="p">,</span> <span class="n">ch</span><span class="o">.</span><span class="n">cfg</span><span class="o">.</span><span class="nb">cap</span><span class="p">)</span>
+		<span class="n">ch</span><span class="o">.</span><span class="n">out</span> <span class="o">=</span> <span class="n">ch</span><span class="o">.</span><span class="n">in</span>
+	<span class="k">case</span> <span class="n">unbounded</span><span class="o">:</span>
+		<span class="n">ch</span><span class="o">.</span><span class="n">in</span> <span class="o">=</span> <span class="nb">make</span><span class="p">(</span><span class="k">chan</span> <span class="n">T</span><span class="p">,</span> <span class="m">16</span><span class="p">)</span>
+		<span class="n">ch</span><span class="o">.</span><span class="n">out</span> <span class="o">=</span> <span class="nb">make</span><span class="p">(</span><span class="k">chan</span> <span class="n">T</span><span class="p">,</span> <span class="m">16</span><span class="p">)</span>
+		<span class="k">go</span> <span class="n">ch</span><span class="o">.</span><span class="n">unboundedProcessing</span><span class="p">()</span>
+	<span class="p">}</span>
+	<span class="k">return</span> <span class="n">ch</span>
+</code></pre></div></div>
+
+<p>它的构造方法抽象出了一个 Opts 可选参数，根据它我们能够统一构造方法，我们不传递 Opts 参数使用默认 config 就表明创建了一个无界限的 channel。<strong>注意：如果我们创建的是无界限的 chann，那么它将启动一个 goroutine 来处理发送和接收数据。同时入口和出口 channel 的缓存长度为 16。</strong></p>
+
+<p>接着是它的发送和接收接口：</p>
+<div class="language-go highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">func</span> <span class="p">(</span><span class="n">ch</span> <span class="o">*</span><span class="n">Chann</span><span class="p">[</span><span class="n">T</span><span class="p">])</span> <span class="n">In</span><span class="p">()</span> <span class="k">chan</span><span class="o">&lt;-</span> <span class="n">T</span> <span class="p">{</span> <span class="k">return</span> <span class="n">ch</span><span class="o">.</span><span class="n">in</span> <span class="p">}</span>
+
+<span class="k">func</span> <span class="p">(</span><span class="n">ch</span> <span class="o">*</span><span class="n">Chann</span><span class="p">[</span><span class="n">T</span><span class="p">])</span> <span class="n">Out</span><span class="p">()</span> <span class="o">&lt;-</span><span class="k">chan</span> <span class="n">T</span> <span class="p">{</span> <span class="k">return</span> <span class="n">ch</span><span class="o">.</span><span class="n">out</span> <span class="p">}</span>
+</code></pre></div></div>
+<p>在这两个接口中我们就是直接返回了 <code class="language-plaintext highlighter-rouge">in</code> 和 <code class="language-plaintext highlighter-rouge">out</code> channel，这样我们就能直接使用 go 原生的 channel 语法来操作 chann。</p>
+
+<p>最后，我们来看一下它的核心逻辑，如何处理数据的发送和接收：</p>
+<div class="language-go highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">func</span> <span class="p">(</span><span class="n">ch</span> <span class="o">*</span><span class="n">Chann</span><span class="p">[</span><span class="n">T</span><span class="p">])</span> <span class="n">unboundedProcessing</span><span class="p">()</span> <span class="p">{</span>
+	<span class="k">var</span> <span class="n">nilT</span> <span class="n">T</span>
+
+	<span class="n">ch</span><span class="o">.</span><span class="n">q</span> <span class="o">=</span> <span class="nb">make</span><span class="p">([]</span><span class="n">T</span><span class="p">,</span> <span class="m">0</span><span class="p">,</span> <span class="m">1</span><span class="o">&lt;&lt;</span><span class="m">10</span><span class="p">)</span>
+	<span class="k">for</span> <span class="p">{</span>
+		<span class="k">select</span> <span class="p">{</span>
+		<span class="k">case</span> <span class="n">e</span><span class="p">,</span> <span class="n">ok</span> <span class="o">:=</span> <span class="o">&lt;-</span><span class="n">ch</span><span class="o">.</span><span class="n">in</span><span class="o">:</span>
+			<span class="k">if</span> <span class="o">!</span><span class="n">ok</span> <span class="p">{</span>
+				<span class="nb">panic</span><span class="p">(</span><span class="s">"chann: send-only channel ch.In() closed unexpectedly"</span><span class="p">)</span>
+			<span class="p">}</span>
+			<span class="n">atomic</span><span class="o">.</span><span class="n">AddInt64</span><span class="p">(</span><span class="o">&amp;</span><span class="n">ch</span><span class="o">.</span><span class="n">cfg</span><span class="o">.</span><span class="nb">len</span><span class="p">,</span> <span class="m">1</span><span class="p">)</span>
+			<span class="n">ch</span><span class="o">.</span><span class="n">q</span> <span class="o">=</span> <span class="nb">append</span><span class="p">(</span><span class="n">ch</span><span class="o">.</span><span class="n">q</span><span class="p">,</span> <span class="n">e</span><span class="p">)</span>
+		<span class="k">case</span> <span class="o">&lt;-</span><span class="n">ch</span><span class="o">.</span><span class="nb">close</span><span class="o">:</span>
+			<span class="n">ch</span><span class="o">.</span><span class="n">unboundedTerminate</span><span class="p">()</span>
+			<span class="k">return</span>
+		<span class="p">}</span>
+
+		<span class="k">for</span> <span class="nb">len</span><span class="p">(</span><span class="n">ch</span><span class="o">.</span><span class="n">q</span><span class="p">)</span> <span class="o">&gt;</span> <span class="m">0</span> <span class="p">{</span>
+			<span class="k">select</span> <span class="p">{</span>
+			<span class="k">case</span> <span class="n">ch</span><span class="o">.</span><span class="n">out</span> <span class="o">&lt;-</span> <span class="n">ch</span><span class="o">.</span><span class="n">q</span><span class="p">[</span><span class="m">0</span><span class="p">]</span><span class="o">:</span>
+				<span class="n">atomic</span><span class="o">.</span><span class="n">AddInt64</span><span class="p">(</span><span class="o">&amp;</span><span class="n">ch</span><span class="o">.</span><span class="n">cfg</span><span class="o">.</span><span class="nb">len</span><span class="p">,</span> <span class="o">-</span><span class="m">1</span><span class="p">)</span>
+				<span class="n">ch</span><span class="o">.</span><span class="n">q</span><span class="p">[</span><span class="m">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">nilT</span>
+				<span class="n">ch</span><span class="o">.</span><span class="n">q</span> <span class="o">=</span> <span class="n">ch</span><span class="o">.</span><span class="n">q</span><span class="p">[</span><span class="m">1</span><span class="o">:</span><span class="p">]</span>
+			<span class="k">case</span> <span class="n">e</span><span class="p">,</span> <span class="n">ok</span> <span class="o">:=</span> <span class="o">&lt;-</span><span class="n">ch</span><span class="o">.</span><span class="n">in</span><span class="o">:</span>
+				<span class="k">if</span> <span class="o">!</span><span class="n">ok</span> <span class="p">{</span>
+					<span class="nb">panic</span><span class="p">(</span><span class="s">"chann: send-only channel ch.In() closed unexpectedly"</span><span class="p">)</span>
+				<span class="p">}</span>
+				<span class="n">atomic</span><span class="o">.</span><span class="n">AddInt64</span><span class="p">(</span><span class="o">&amp;</span><span class="n">ch</span><span class="o">.</span><span class="n">cfg</span><span class="o">.</span><span class="nb">len</span><span class="p">,</span> <span class="m">1</span><span class="p">)</span>
+				<span class="n">ch</span><span class="o">.</span><span class="n">q</span> <span class="o">=</span> <span class="nb">append</span><span class="p">(</span><span class="n">ch</span><span class="o">.</span><span class="n">q</span><span class="p">,</span> <span class="n">e</span><span class="p">)</span>
+			<span class="k">case</span> <span class="o">&lt;-</span><span class="n">ch</span><span class="o">.</span><span class="nb">close</span><span class="o">:</span>
+				<span class="n">ch</span><span class="o">.</span><span class="n">unboundedTerminate</span><span class="p">()</span>
+				<span class="k">return</span>
+			<span class="p">}</span>
+		<span class="p">}</span>
+		<span class="k">if</span> <span class="nb">cap</span><span class="p">(</span><span class="n">ch</span><span class="o">.</span><span class="n">q</span><span class="p">)</span> <span class="o">&lt;</span> <span class="m">1</span><span class="o">&lt;&lt;</span><span class="m">5</span> <span class="p">{</span>
+			<span class="n">ch</span><span class="o">.</span><span class="n">q</span> <span class="o">=</span> <span class="nb">make</span><span class="p">([]</span><span class="n">T</span><span class="p">,</span> <span class="m">0</span><span class="p">,</span> <span class="m">1</span><span class="o">&lt;&lt;</span><span class="m">10</span><span class="p">)</span>
+		<span class="p">}</span>
+	<span class="p">}</span>
+<span class="p">}</span>
+
+<span class="k">func</span> <span class="p">(</span><span class="n">ch</span> <span class="o">*</span><span class="n">Chann</span><span class="p">[</span><span class="n">T</span><span class="p">])</span> <span class="n">unboundedTerminate</span><span class="p">()</span> <span class="p">{</span>
+	<span class="k">var</span> <span class="n">nilT</span> <span class="n">T</span>
+
+	<span class="nb">close</span><span class="p">(</span><span class="n">ch</span><span class="o">.</span><span class="n">in</span><span class="p">)</span>
+	<span class="k">for</span> <span class="n">e</span> <span class="o">:=</span> <span class="k">range</span> <span class="n">ch</span><span class="o">.</span><span class="n">in</span> <span class="p">{</span>
+		<span class="n">ch</span><span class="o">.</span><span class="n">q</span> <span class="o">=</span> <span class="nb">append</span><span class="p">(</span><span class="n">ch</span><span class="o">.</span><span class="n">q</span><span class="p">,</span> <span class="n">e</span><span class="p">)</span>
+	<span class="p">}</span>
+	<span class="k">for</span> <span class="nb">len</span><span class="p">(</span><span class="n">ch</span><span class="o">.</span><span class="n">q</span><span class="p">)</span> <span class="o">&gt;</span> <span class="m">0</span> <span class="p">{</span>
+		<span class="k">select</span> <span class="p">{</span>
+		<span class="k">case</span> <span class="n">ch</span><span class="o">.</span><span class="n">out</span> <span class="o">&lt;-</span> <span class="n">ch</span><span class="o">.</span><span class="n">q</span><span class="p">[</span><span class="m">0</span><span class="p">]</span><span class="o">:</span>
+		<span class="k">default</span><span class="o">:</span>
+		<span class="p">}</span>
+		<span class="n">ch</span><span class="o">.</span><span class="n">q</span><span class="p">[</span><span class="m">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">nilT</span>
+		<span class="n">ch</span><span class="o">.</span><span class="n">q</span> <span class="o">=</span> <span class="n">ch</span><span class="o">.</span><span class="n">q</span><span class="p">[</span><span class="m">1</span><span class="o">:</span><span class="p">]</span>
+	<span class="p">}</span>
+	<span class="nb">close</span><span class="p">(</span><span class="n">ch</span><span class="o">.</span><span class="n">out</span><span class="p">)</span>
+	<span class="nb">close</span><span class="p">(</span><span class="n">ch</span><span class="o">.</span><span class="nb">close</span><span class="p">)</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>它的主逻辑就是一个 for 循环：</p>
+<ol>
+  <li>初始化 <code class="language-plaintext highlighter-rouge">q</code>，初始容量为 1024</li>
+  <li>启动 for 循环，</li>
+  <li>进行 select 操作，如果有数据可以接收，则存入 <code class="language-plaintext highlighter-rouge">q</code> 缓存中，否则如果是 close 则进行关闭操作并退出</li>
+  <li>如果当前缓存中有数据，则启动内层循环</li>
+  <li>进行 select 操作，尝试发送缓存中的第一个元素，并且删除它。同时也会尝试接收新的数据，如果有新数据则存入 <code class="language-plaintext highlighter-rouge">q</code> 缓存中。另外，如果是 close 则进行关闭操作并退出</li>
+  <li>如果当前缓存中的数据已经全部发送完毕，则退出内层循环并且判断是否需要扩容，然后进入下一次主循环</li>
+</ol>
+
+<p>它的关闭流程：</p>
+<ol>
+  <li>关闭入口 channel，不再接收新的数据</li>
+  <li>将当前入口 channel 中的数据全部缓存起来等待处理，尝试优雅的停机</li>
+  <li>如果缓存中有数据的话，则启动 for 循环不断的将数据发送给出口 channel</li>
+  <li>最终所有数据都处理完毕，则关闭剩余 channel</li>
+</ol>
+
+<p>以上就是它的核心实现，总的来说还是非常清晰和简单的。下面我们就来看看我在使用过程中遇到的问题！</p>
+
+<h2 id="一个-">一个 🐛</h2>
+<p>首先是我在使用过程中遇到的一个 bug，issue 的链接：https://github.com/golang-design/chann/issues/3</p>
+
+<p>我和同事在使用 chann 过程中发现因为关闭操作不当会导致 cpu spin。我们在上面看的代码是目前最新的代码，但是在我报告这个 issue 之前它的 close 操作的核心逻辑是这样的：</p>
+<div class="language-go highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">for</span> <span class="nb">len</span><span class="p">(</span><span class="n">q</span><span class="p">)</span> <span class="o">&gt;</span> <span class="m">0</span> <span class="p">{</span>
+    <span class="k">select</span> <span class="p">{</span>
+		<span class="k">case</span> <span class="n">ch</span><span class="o">.</span><span class="n">out</span> <span class="o">&lt;-</span> <span class="n">q</span><span class="p">[</span><span class="m">0</span><span class="p">]</span><span class="o">:</span>
+			    <span class="n">q</span><span class="p">[</span><span class="m">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">nilT</span> <span class="c">// de-reference earlier to help GC</span>
+				<span class="n">q</span> <span class="o">=</span> <span class="n">q</span><span class="p">[</span><span class="m">1</span><span class="o">:</span><span class="p">]</span>
+		<span class="k">default</span><span class="o">:</span>
+	<span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div></div>
+<p>请注意它和上面的操作完全是两个语义：</p>
+<div class="language-go highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">for</span> <span class="nb">len</span><span class="p">(</span><span class="n">q</span><span class="p">)</span> <span class="o">&gt;</span> <span class="m">0</span> <span class="p">{</span>
+    <span class="k">select</span> <span class="p">{</span>
+	    <span class="k">case</span> <span class="n">ch</span><span class="o">.</span><span class="n">out</span> <span class="o">&lt;-</span> <span class="n">q</span><span class="p">[</span><span class="m">0</span><span class="p">]</span><span class="o">:</span>
+		<span class="k">default</span><span class="o">:</span>
+	<span class="p">}</span>
+	<span class="n">q</span><span class="p">[</span><span class="m">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">nilT</span> <span class="c">// de-reference earlier to help GC</span>
+    <span class="n">q</span> <span class="o">=</span> <span class="n">q</span><span class="p">[</span><span class="m">1</span><span class="o">:</span><span class="p">]</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>原来的写法，在 close 操作之后如果没有 receiver 继续接收数据，则 for 循环会一直进入 default 分支进行死循环，导致出现 cpu spin。</p>
+
+<p>而现在的做法是，当没有 receiver 时会进入 default 分支并且直接删除该数据，这样就能防止出现死循环导致 cpu spin。</p>
+
+<p>目前这样的做法也导致了语义的变化，我们现在实际上已经做不到优雅的停机了，因为很有可能在 default 分支被执行之后消费者丢失部分数据。具体的例子可以查看 <a href="https://github.com/changkun">changkun</a> 的<a href="https://github.com/golang-design/chann/issues/3#issuecomment-1150189421">回复</a>。</p>
+
+<p>目前这个问题还是没有被完全解决，在我个人来看，我更愿意保持原来的做法让用户来处置剩下的数据，这样语义更加明确。但是我们还是需要删除原来做法中的 default 分支，防止出现死循环。让用户来保证消费完所有剩余数据防止出现 goroutine 泄漏。</p>
+
+<p>但这只是我个人的想法，<a href="https://github.com/changkun">changkun</a> 实际上不太认可这个做法，因为还是存在 goroutine 泄漏的风险。期待我们有更好的方案能彻底解决这个问题。</p>
+
+<p>因为该问题没有被解决，所以我决定将代码 <a href="https://github.com/pingcap/tiflow/pull/5675">fork</a> 到 <a href="https://github.com/pingcap/tiflow">ticdc</a> 仓库中，在这个过程中我又发现了一个不稳定的测试。</p>
+
+<h2 id="一个不稳定测试">一个不稳定测试</h2>
+<p>在 fork 代码的过程中，我发现 <code class="language-plaintext highlighter-rouge">TestNonblockSelectRace</code> 非常不稳定，在我们的 CI 系统中几乎稳定失败：</p>
+<div class="language-go highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">func</span> <span class="n">TestNonblockSelectRace</span><span class="p">(</span><span class="n">t</span> <span class="o">*</span><span class="n">testing</span><span class="o">.</span><span class="n">T</span><span class="p">)</span> <span class="p">{</span>
+	<span class="n">n</span> <span class="o">:=</span> <span class="m">1000</span>
+	<span class="k">if</span> <span class="n">testing</span><span class="o">.</span><span class="n">Short</span><span class="p">()</span> <span class="p">{</span>
+		<span class="n">n</span> <span class="o">=</span> <span class="m">1000</span>
+	<span class="p">}</span>
+	<span class="n">done</span> <span class="o">:=</span> <span class="n">chann</span><span class="o">.</span><span class="n">New</span><span class="p">[</span><span class="kt">bool</span><span class="p">](</span><span class="n">chann</span><span class="o">.</span><span class="n">Cap</span><span class="p">(</span><span class="m">1</span><span class="p">))</span>
+	<span class="k">for</span> <span class="n">i</span> <span class="o">:=</span> <span class="m">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">n</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span> <span class="p">{</span>
+		<span class="n">c1</span> <span class="o">:=</span> <span class="n">chann</span><span class="o">.</span><span class="n">New</span><span class="p">[</span><span class="kt">int</span><span class="p">]()</span>
+		<span class="n">c2</span> <span class="o">:=</span> <span class="n">chann</span><span class="o">.</span><span class="n">New</span><span class="p">[</span><span class="kt">int</span><span class="p">]()</span>
+		<span class="n">c1</span><span class="o">.</span><span class="n">In</span><span class="p">()</span> <span class="o">&lt;-</span> <span class="m">1</span>
+		<span class="k">go</span> <span class="k">func</span><span class="p">()</span> <span class="p">{</span>
+			<span class="n">runtime</span><span class="o">.</span><span class="n">Gosched</span><span class="p">()</span>
+			<span class="k">select</span> <span class="p">{</span>
+			<span class="k">case</span> <span class="o">&lt;-</span><span class="n">c1</span><span class="o">.</span><span class="n">Out</span><span class="p">()</span><span class="o">:</span>
+			<span class="k">case</span> <span class="o">&lt;-</span><span class="n">c2</span><span class="o">.</span><span class="n">Out</span><span class="p">()</span><span class="o">:</span>
+			<span class="k">default</span><span class="o">:</span>
+				<span class="n">done</span><span class="o">.</span><span class="n">In</span><span class="p">()</span> <span class="o">&lt;-</span> <span class="no">false</span>
+				<span class="k">return</span>
+			<span class="p">}</span>
+			<span class="n">done</span><span class="o">.</span><span class="n">In</span><span class="p">()</span> <span class="o">&lt;-</span> <span class="no">true</span>
+		<span class="p">}()</span>
+		<span class="n">c2</span><span class="o">.</span><span class="n">In</span><span class="p">()</span> <span class="o">&lt;-</span> <span class="m">1</span>
+		<span class="k">select</span> <span class="p">{</span>
+		<span class="k">case</span> <span class="o">&lt;-</span><span class="n">c1</span><span class="o">.</span><span class="n">Out</span><span class="p">()</span><span class="o">:</span>
+		<span class="k">default</span><span class="o">:</span>
+		<span class="p">}</span>
+		<span class="k">if</span> <span class="o">!&lt;-</span><span class="n">done</span><span class="o">.</span><span class="n">Out</span><span class="p">()</span> <span class="p">{</span>
+			<span class="n">t</span><span class="o">.</span><span class="n">Fatal</span><span class="p">(</span><span class="s">"no chan is ready"</span><span class="p">)</span>
+		<span class="p">}</span>
+	<span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>这个测试的语义的保证是，当数据通过 In() 接口被写入之后，我们总是立马就能消费到该数据，但是实际上我们并不能提供这个语义保证，因为数据被写入之后还要等待被写入缓存中，才有可能被消费到。</p>
+
+<p>我做了一些修复降低了这个问题复现的频率，但是因为我们还是无法保证这个语义，所以最终 <a href="https://github.com/golang-design/chann/pull/2">PR</a> 还是没有被接受。</p>
+
+<p>最终 <a href="https://github.com/changkun">changkun</a> 提交了代码明确了我们没有这个语义保证并且修复了这个不稳定测试。
+新的语义如下：</p>
+<blockquote>
+  <p>// An unbounded channel is not a buffered channel with infinite capacity,
+and they have different memory model semantics in terms of receiving
+a value: The recipient of a buffered channel is immediately available
+after a send is complete. However, the recipient of an unbounded channel
+may be available within a bounded time frame after a send is complete.</p>
+</blockquote>
+
+<p>他测试修改的也很巧妙：</p>
+<div class="language-go highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">func</span> <span class="n">TestNonblockSelectRace</span><span class="p">(</span><span class="n">t</span> <span class="o">*</span><span class="n">testing</span><span class="o">.</span><span class="n">T</span><span class="p">)</span> <span class="p">{</span>
+	<span class="n">n</span> <span class="o">:=</span> <span class="m">1000</span>
+	<span class="n">done</span> <span class="o">:=</span> <span class="n">chann</span><span class="o">.</span><span class="n">New</span><span class="p">[</span><span class="kt">bool</span><span class="p">](</span><span class="n">chann</span><span class="o">.</span><span class="n">Cap</span><span class="p">(</span><span class="m">1</span><span class="p">))</span>
+	<span class="k">for</span> <span class="n">i</span> <span class="o">:=</span> <span class="m">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">n</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span> <span class="p">{</span>
+		<span class="n">c1</span> <span class="o">:=</span> <span class="n">chann</span><span class="o">.</span><span class="n">New</span><span class="p">[</span><span class="kt">int</span><span class="p">]()</span>
+		<span class="n">c2</span> <span class="o">:=</span> <span class="n">chann</span><span class="o">.</span><span class="n">New</span><span class="p">[</span><span class="kt">int</span><span class="p">]()</span>
+
+		<span class="c">// The input channel of an unbounded buffer have an internal</span>
+		<span class="c">// cache queue. When the input channel and the internal cache</span>
+		<span class="c">// queue both gets full, we are certain that once the next send</span>
+		<span class="c">// is complete, the out will be available for sure hence the</span>
+		<span class="c">// waiting time of a receive is bounded.</span>
+		<span class="k">for</span> <span class="n">i</span> <span class="o">:=</span> <span class="m">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">internalCacheSize</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span> <span class="p">{</span>
+			<span class="n">c1</span><span class="o">.</span><span class="n">In</span><span class="p">()</span> <span class="o">&lt;-</span> <span class="m">1</span>
+		<span class="p">}</span>
+		<span class="n">c1</span><span class="o">.</span><span class="n">In</span><span class="p">()</span> <span class="o">&lt;-</span> <span class="m">1</span>
+		<span class="k">go</span> <span class="k">func</span><span class="p">()</span> <span class="p">{</span>
+			<span class="k">select</span> <span class="p">{</span>
+			<span class="k">case</span> <span class="o">&lt;-</span><span class="n">c1</span><span class="o">.</span><span class="n">Out</span><span class="p">()</span><span class="o">:</span>
+			<span class="k">case</span> <span class="o">&lt;-</span><span class="n">c2</span><span class="o">.</span><span class="n">Out</span><span class="p">()</span><span class="o">:</span>
+			<span class="k">default</span><span class="o">:</span>
+				<span class="n">done</span><span class="o">.</span><span class="n">In</span><span class="p">()</span> <span class="o">&lt;-</span> <span class="no">false</span>
+				<span class="k">return</span>
+			<span class="p">}</span>
+			<span class="n">done</span><span class="o">.</span><span class="n">In</span><span class="p">()</span> <span class="o">&lt;-</span> <span class="no">true</span>
+		<span class="p">}()</span>
+		<span class="c">// Same for c2</span>
+		<span class="k">for</span> <span class="n">i</span> <span class="o">:=</span> <span class="m">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">internalCacheSize</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span> <span class="p">{</span>
+			<span class="n">c2</span><span class="o">.</span><span class="n">In</span><span class="p">()</span> <span class="o">&lt;-</span> <span class="m">1</span>
+		<span class="p">}</span>
+		<span class="n">c2</span><span class="o">.</span><span class="n">In</span><span class="p">()</span> <span class="o">&lt;-</span> <span class="m">1</span>
+		<span class="k">select</span> <span class="p">{</span>
+		<span class="k">case</span> <span class="o">&lt;-</span><span class="n">c1</span><span class="o">.</span><span class="n">Out</span><span class="p">()</span><span class="o">:</span>
+		<span class="k">default</span><span class="o">:</span>
+		<span class="p">}</span>
+		<span class="k">if</span> <span class="o">!&lt;-</span><span class="n">done</span><span class="o">.</span><span class="n">Out</span><span class="p">()</span> <span class="p">{</span>
+			<span class="n">t</span><span class="o">.</span><span class="n">Fatal</span><span class="p">(</span><span class="s">"no chan is ready"</span><span class="p">)</span>
+		<span class="p">}</span>
+	<span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>因为我们的缓存队列大小是固定的，所以当我们确保缓存已满之后再写入时，我们总会有足够的时间收到写入的数据。</p>
+
+<h2 id="学到的小技巧">学到的小技巧</h2>
+
+<p>在 fork 代码的过程中发现了几个 <a href="https://github.com/changkun">changkun</a> 的代码中很有用的技巧。</p>
+
+<ol>
+  <li>在切片中的数据被消费使用之后，将其设置为 nil，并且在容量不足时总是 make 新的切片，这样会帮助 GC 更快回收内存。</li>
+  <li>创建 <code class="language-plaintext highlighter-rouge">export_test.go</code> 文件导出测试专用函数，既能访问到内部状态，又不用将单元测试也放在同一个包下导致测试到处都依赖内部状态。</li>
+  <li>利用 <code class="language-plaintext highlighter-rouge">runtime.GOMAXPROCS</code> 和 <code class="language-plaintext highlighter-rouge">runtime.NumGoroutine</code> 来构造特定 goroutine 测试场景和检测 goroutine 泄漏。</li>
+</ol>
+
+<h3 id="参考链接">参考链接</h3>
+
+<p><a href="https://github.com/golang-design/chann">chann</a></p>
+
+<p><a href="https://golang.design/research/ultimate-channel/">ultimate-channel</a></p>
+
+<p><a href="https://stackoverflow.com/questions/50732829/will-gc-collect-the-objects-while-the-array-set-to-nil-in-golang">Will gc collect the objects while the array set to nil in Golang?</a></p>
+
+
+
+    <p class="signature">&mdash; Rustin</p>
+  </div>
+  <script>
+    (function () {
+      anchors.options.placement = 'right';
+      anchors.add('.content > h3, .content > h4, .content > h5, .content > h6');
+    })();
+  </script>
+  <script src="https://giscus.app/client.js" data-repo="Rustin170506/blog"
+    data-repo-id="MDEwOlJlcG9zaXRvcnkyMTU4MDI0NDg=" data-category="Ideas" data-category-id="DIC_kwDODNziUM4CY_bg"
+    data-mapping="title" data-strict="0" data-reactions-enabled="1" data-emit-metadata="0" data-input-position="top"
+    data-theme="light" data-lang="en" data-loading="lazy" crossorigin="anonymous" async>
+    </script>
+</body>
+
+</html>

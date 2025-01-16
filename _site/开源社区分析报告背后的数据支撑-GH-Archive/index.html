@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>开源社区分析报告背后的数据支撑: GH Archive - Rustin</title>
+  <link rel="stylesheet" href="https://netdna.bootstrapcdn.com/bootstrap/3.1.1/css/bootstrap.min.css" type="text/css">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Merriweather+Sans:400,300,700" type="text/css">
+  <link rel="stylesheet" href="/static/app.css" type="text/css">
+  <link rel="stylesheet" href="/static/syntax.css" type="text/css">
+  <link type="application/atom+xml" rel="alternate" href="http://localhost:4000/feed.xml" />
+  <meta name="theme-color" content="#111111">
+
+  <meta name="og:type" content="article">
+  <meta name="og:title" content="开源社区分析报告背后的数据支撑: GH Archive – Rustin">
+  <meta name="og:description" content="">
+  <meta name="og:site_name" content="Rustin">
+  <meta name="og:url" content="http://localhost:4000/%E5%BC%80%E6%BA%90%E7%A4%BE%E5%8C%BA%E5%88%86%E6%9E%90%E6%8A%A5%E5%91%8A%E8%83%8C%E5%90%8E%E7%9A%84%E6%95%B0%E6%8D%AE%E6%94%AF%E6%92%91-GH-Archive/">
+  
+  <meta name="og:image" content="http://localhost:4000/static/default_image.jpg">
+  
+  <meta property="article:published_time" content=" 2021-03-07">
+
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:site" content="@hi_rustin">
+  <meta name="twitter:domain" content="rustin.me">
+  <meta name="twitter:title" content="开源社区分析报告背后的数据支撑: GH Archive – Rustin">
+  <meta name="twitter:description" content="">
+  
+  <meta name="twitter:image" content="http://localhost:4000/static/default_image.jpg">
+  
+  <meta name="twitter:url" content="http://localhost:4000/%E5%BC%80%E6%BA%90%E7%A4%BE%E5%8C%BA%E5%88%86%E6%9E%90%E6%8A%A5%E5%91%8A%E8%83%8C%E5%90%8E%E7%9A%84%E6%95%B0%E6%8D%AE%E6%94%AF%E6%92%91-GH-Archive/">
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/anchor-js/3.2.0/anchor.min.js"></script>
+</head>
+
+<body>
+  <header>
+    <h1><a href="/">Rustin</a></h1>
+    <span>I’m a passionate software engineer who specializes in distributed systems and dev tools.</span>
+  </header>
+
+  <div class="content post">
+    <h2>开源社区分析报告背后的数据支撑: GH Archive</h2>
+    <p class="date">07 March 2021</p>
+
+    <p>最近应老板要求看了一个 X-lab 针对 GitHub 开源项目的<a href="http://www.x-lab.info/github-analysis-report/#/report">分析报告</a>，发现了一个背后非常好用并且强大的<a href="https://www.gharchive.org/">数据集</a>。所以简单介绍一下这个数据集的收集方式和使用方法。</p>
+
+<p>此博客在 <a href="https://github.com/Rustin170506/blog">GitHub</a> 上公开发布. 如果您有任何问题或疑问，请在此处打开一个 <a href="https://github.com/Rustin170506/blog/issues">issue</a>.</p>
+
+<h2 id="简介">简介</h2>
+
+<p>前段时间过年的时候老板给我发来了一个 <a href="http://www.x-lab.info/">X-lab</a> 实验室做的 GitHub 开源项目的<a href="http://www.x-lab.info/github-analysis-report/#/report">分析报告</a>想让我看看我们是否可以学习和利用其中的分析方法和数据集。我就看了看这个报告，发现它其实背后是使用了另外一个开源项目 <a href="https://github.com/igrigorik/gharchive.org">GH Archive</a> 归档的数据集并配合 ClickHouse 生成了分析报告。所以我就简单的看了看这个项目，下面是这个 GitHub 归档项目的实现思路和使用方法。</p>
+
+<h2 id="gh-archive-设计和实现思路">GH Archive 设计和实现思路</h2>
+
+<p>GH Archive 采取了一个非常暴力但是非常有效的归档方式，他们将 GitHub 所有的事件的都利用 GitHub 提供的 <a href="https://api.github.com/events">Event API</a> 爬取了下来，然后按照 JSON 的格式存了下来。</p>
+
+<p>他们使用 ruby 来调用 GitHub API 进行爬取，具体的代码在 <a href="https://github.com/igrigorik/gharchive.org/blob/master/crawler/crawler.rb">crawler.rb</a>。有效的代码不超过一百行，所以就不具体展开解读了。<strong>主要就是调用 API 并且将数据按照日期整理为 JSON 格式的文件。</strong></p>
+
+<h2 id="同步至-bigquery-数据集">同步至 BigQuery 数据集</h2>
+
+<p>GH Archive 通过爬取的方式整理好数据之后提供了 JSON 数据集的下载服务，我们可以通过 HTTP 客户端下载这些数据集，例如使用 <code class="language-plaintext highlighter-rouge">wget</code>:</p>
+
+<div class="language-sh highlighter-rouge"><div class="highlight"><pre class="highlight"><code>wget https://data.gharchive.org/2015-01-01-15.json.gz
+</code></pre></div></div>
+
+<p>这样我们就可以下载 2015 年 1 月 1 日 GitHub 所有公开仓库的所有事件。</p>
+
+<p>但是这样的 JSON 数据集分析起来不是很方便，还要配合其他的工具类进行分析。所以 GH Archive 就官方提供了一个免费公开的 Google BigQuery 数据集：githubarchive。</p>
+
+<p>数据集的结构主要还是按照时间范围来划分：</p>
+<ul>
+  <li>day（e.g. 20150101）</li>
+  <li>month（e.g. 201501）</li>
+  <li>year（e.g. 2015）</li>
+</ul>
+
+<p>GH Archive 利用<a href="https://github.com/igrigorik/gharchive.org/blob/master/crawler/tasks.cron">定时任务</a>每一个小时同步一次数据到 BigQuery 数据集，他们将所有的 event 都构造成了同一个<a href="https://github.com/igrigorik/gharchive.org/blob/master/bigquery/schema.js">结构</a>。</p>
+
+<p>这样就可以通过 BigQuery 来查询数据了，因为所有的事件的主要信息都存放在 payload 里面，我们可以利用 BigQuery 提供的 <a href="https://cloud.google.com/bigquery/docs/reference/legacy-sql#jsonfunctions">JSON 相关函数</a>来处理和提取这些字段和内容。</p>
+
+<p>另外考虑到 GitHub 在不断的迭代，可能会对某些事件新增一些字段，所以 GH Archive 提供了一个 other 字段来存储这些新增的字段。</p>
+
+<h2 id="bigquery-数据集使用方法">BigQuery 数据集使用方法</h2>
+
+<p>通过以下几个步骤使用这个开放的数据集：</p>
+<ol>
+  <li><a href="https://console.developers.google.com/">登陆 Google 开发者控制台</a></li>
+  <li>如果没有项目的话创建一个新的项目并且<strong>激活使用 BigQuery API</strong></li>
+  <li><a href="https://console.cloud.google.com/bigquery?project=githubarchive&amp;page=project">打开数据集</a>或者直接在项目中新建查询</li>
+  <li>执行以下查询：
+    <div class="language-sql highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="cm">/* count of issues opened, closed, and reopened on 2019/01/01 */</span>
+<span class="k">SELECT</span> <span class="n">event</span> <span class="k">as</span> <span class="n">issue_status</span><span class="p">,</span> <span class="k">COUNT</span><span class="p">(</span><span class="o">*</span><span class="p">)</span> <span class="k">as</span> <span class="n">cnt</span> <span class="k">FROM</span> <span class="p">(</span>
+<span class="k">SELECT</span> <span class="k">type</span><span class="p">,</span> <span class="n">repo</span><span class="p">.</span><span class="n">name</span><span class="p">,</span> <span class="n">actor</span><span class="p">.</span><span class="n">login</span><span class="p">,</span><span class="n">JSON_EXTRACT</span><span class="p">(</span><span class="n">payload</span><span class="p">,</span> <span class="s1">'$.action'</span><span class="p">)</span> <span class="k">as</span> <span class="n">event</span><span class="p">,</span>
+<span class="k">FROM</span> <span class="nv">`githubarchive.day.20190101`</span>
+<span class="k">WHERE</span> <span class="k">type</span> <span class="o">=</span> <span class="s1">'IssuesEvent'</span><span class="p">)</span>
+<span class="k">GROUP</span> <span class="k">by</span> <span class="n">issue_status</span><span class="p">;</span>
+</code></pre></div>    </div>
+  </li>
+</ol>
+
+<p>这样我们就成功的用上了这个公开的 BigQuery 数据集，下面我写几个简单的例子演示一下更多的查询：</p>
+
+<h3 id="查询-1-如何证明-pingcap-节假日没上班">查询 1: 如何证明 PingCAP 节假日没上班？</h3>
+
+<p>取样调查😂，我们查询一下 2021 年 1 月 1 日 TiDB 仓库有没有提交代码即可：</p>
+
+<div class="language-sql highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="cm">/* 2021 年 1 月 1 日 TiDB 仓库代码 Push 次数 */</span>
+<span class="k">SELECT</span> <span class="k">COUNT</span><span class="p">(</span><span class="o">*</span><span class="p">)</span> <span class="k">as</span> <span class="n">cnt</span>
+<span class="k">FROM</span> <span class="nv">`githubarchive.day.20210101`</span>
+<span class="k">WHERE</span> <span class="k">type</span> <span class="o">=</span> <span class="s1">'PushEvent'</span> <span class="k">and</span> <span class="n">org</span><span class="p">.</span><span class="n">login</span> <span class="o">=</span> <span class="s1">'pingcap'</span> <span class="k">and</span> <span class="n">repo</span><span class="p">.</span><span class="n">name</span> <span class="o">=</span> <span class="s1">'pingcap/tidb'</span><span class="p">;</span>
+</code></pre></div></div>
+
+<p>结果为：<code class="language-plaintext highlighter-rouge">cnt: 0</code></p>
+
+<h3 id="查询-2-想要-tidb-2020-年的贡献者名单">查询 2: 想要 TiDB 2020 年的贡献者名单？</h3>
+
+<p>我们查询 2020 年给 TiDB 提过 PR 的人员名单：</p>
+
+<div class="language-sql highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="cm">/* 2020 年给 TiDB 提过 PR 的人员名单（只要提交就算） */</span>
+<span class="k">SELECT</span> <span class="k">DISTINCT</span> <span class="n">actor</span><span class="p">.</span><span class="n">login</span> <span class="k">as</span> <span class="n">name</span><span class="p">,</span>
+<span class="k">FROM</span> <span class="nv">`githubarchive.year.2020`</span>
+<span class="k">WHERE</span> <span class="k">type</span> <span class="o">=</span> <span class="s1">'PullRequestEvent'</span> <span class="k">and</span> <span class="n">org</span><span class="p">.</span><span class="n">login</span> <span class="o">=</span> <span class="s1">'pingcap'</span> <span class="k">and</span> <span class="n">repo</span><span class="p">.</span><span class="n">name</span> <span class="o">=</span> <span class="s1">'pingcap/tidb'</span> <span class="k">and</span> <span class="n">JSON_EXTRACT</span><span class="p">(</span><span class="n">payload</span><span class="p">,</span> <span class="s1">'$.action'</span><span class="p">)</span> <span class="o">=</span> <span class="s1">'"opened"'</span><span class="p">;</span>
+</code></pre></div></div>
+
+<p>结果为： 247 个人</p>
+
+<h3 id="查询-3tidb-社区新的协作机器人上线后3-月份至今还有多少人在手动合并-tidb-的-pr">查询 3：TiDB 社区<a href="https://github.com/ti-chi-bot">新的协作机器人</a>上线后，3 月份至今还有多少人在手动合并 TiDB 的 PR？</h3>
+
+<p>我们查询 3 月份至今所有 Push 事件的 actor 即可：</p>
+
+<div class="language-sql highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="cm">/* 2021 年 3 月还在手动合并 PR 的人员名单 */</span>
+<span class="k">SELECT</span> <span class="k">DISTINCT</span> <span class="n">actor</span><span class="p">.</span><span class="n">login</span>
+<span class="k">FROM</span> <span class="nv">`githubarchive.month.202103`</span>
+<span class="k">WHERE</span> <span class="k">type</span> <span class="o">=</span> <span class="s1">'PushEvent'</span> <span class="k">and</span> <span class="n">org</span><span class="p">.</span><span class="n">login</span> <span class="o">=</span> <span class="s1">'pingcap'</span> <span class="k">and</span> <span class="n">repo</span><span class="p">.</span><span class="n">name</span> <span class="o">=</span> <span class="s1">'pingcap/tidb'</span><span class="p">;</span>
+</code></pre></div></div>
+
+<p>结果为：除了机器人外，还有 6 个人。</p>
+
+<div class="language-json highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="p">[</span><span class="w">
+  </span><span class="p">{</span><span class="w">
+    </span><span class="nl">"login"</span><span class="p">:</span><span class="w"> </span><span class="s2">"AndreMouche"</span><span class="w">
+  </span><span class="p">},</span><span class="w">
+  </span><span class="p">{</span><span class="w">
+    </span><span class="nl">"login"</span><span class="p">:</span><span class="w"> </span><span class="s2">"qw4990"</span><span class="w">
+  </span><span class="p">},</span><span class="w">
+  </span><span class="p">{</span><span class="w">
+    </span><span class="nl">"login"</span><span class="p">:</span><span class="w"> </span><span class="s2">"hanfei1991"</span><span class="w">
+  </span><span class="p">},</span><span class="w">
+  </span><span class="p">{</span><span class="w">
+    </span><span class="nl">"login"</span><span class="p">:</span><span class="w"> </span><span class="s2">"ti-chi-bot"</span><span class="w">
+  </span><span class="p">},</span><span class="w">
+  </span><span class="p">{</span><span class="w">
+    </span><span class="nl">"login"</span><span class="p">:</span><span class="w"> </span><span class="s2">"AilinKid"</span><span class="w">
+  </span><span class="p">},</span><span class="w">
+  </span><span class="p">{</span><span class="w">
+    </span><span class="nl">"login"</span><span class="p">:</span><span class="w"> </span><span class="s2">"tiancaiamao"</span><span class="w">
+  </span><span class="p">},</span><span class="w">
+  </span><span class="p">{</span><span class="w">
+    </span><span class="nl">"login"</span><span class="p">:</span><span class="w"> </span><span class="s2">"eurekaka"</span><span class="w">
+  </span><span class="p">}</span><span class="w">
+</span><span class="p">]</span><span class="w">
+</span></code></pre></div></div>
+
+<p>有了这些所有事件的归档，我们可以从很多的角度去分析社区的运行状况。<strong>同时因为 payload 的信息非常全面，我们甚至能够通过项目的 ID 或者用户的 ID 去仔细查询分析所有的事件，不会有数据因为项目重命名或者迁移组织而无法查询。</strong></p>
+
+<h2 id="与其他工具结合">与其他工具结合</h2>
+
+<p>因为 GH Archive 存储的是 JSON 格式，所以我们完全可以将数据导入到其他工具中进行分析处理，比如 X-lab 就将数据导入了他们自己的 ClickHouse，并且按照他们的报告需求对数据进行了<a href="https://github.com/X-lab2017/github-analysis-report/tree/master/sqls">分析</a>。另外也有开源组织创建了一个公开的 <a href="https://github.com/github-sql/explorer">ClickHouse 数据集</a>并且创建了大量的查询和分析样例。</p>
+
+<p>更多与其他工具结合的例子可以参考 GH Archive 官网中的<a href="https://www.gharchive.org/#resources">资源</a>。</p>
+
+<p>我会继续探索 GH Archive 在 TiDB 社区落地的方案，就目前来看完全可以满足我们对社区运营的数据支撑需求。后续我也会更新 GH Archive 在 TiDB 社区应用的场景和具体落地方案。</p>
+
+<h3 id="参考链接">参考链接</h3>
+
+<p><a href="http://www.x-lab.info/github-analysis-report/#/report">github-analysis-report</a></p>
+
+<p><a href="https://www.gharchive.org/">gharchive.org</a></p>
+
+<p><a href="https://gh.clickhouse.tech/explorer/">Everything You Always Wanted To Know
+About GitHub</a></p>
+
+
+    <p class="signature">&mdash; Rustin</p>
+  </div>
+  <script>
+    (function () {
+      anchors.options.placement = 'right';
+      anchors.add('.content > h3, .content > h4, .content > h5, .content > h6');
+    })();
+  </script>
+  <script src="https://giscus.app/client.js" data-repo="Rustin170506/blog"
+    data-repo-id="MDEwOlJlcG9zaXRvcnkyMTU4MDI0NDg=" data-category="Ideas" data-category-id="DIC_kwDODNziUM4CY_bg"
+    data-mapping="title" data-strict="0" data-reactions-enabled="1" data-emit-metadata="0" data-input-position="top"
+    data-theme="light" data-lang="en" data-loading="lazy" crossorigin="anonymous" async>
+    </script>
+</body>
+
+</html>

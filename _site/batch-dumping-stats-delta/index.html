@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Batch Dumping Statistics Delta - Rustin</title>
+  <link rel="stylesheet" href="https://netdna.bootstrapcdn.com/bootstrap/3.1.1/css/bootstrap.min.css" type="text/css">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Merriweather+Sans:400,300,700" type="text/css">
+  <link rel="stylesheet" href="/static/app.css" type="text/css">
+  <link rel="stylesheet" href="/static/syntax.css" type="text/css">
+  <link type="application/atom+xml" rel="alternate" href="http://localhost:4000/feed.xml" />
+  <meta name="theme-color" content="#111111">
+
+  <meta name="og:type" content="article">
+  <meta name="og:title" content="Batch Dumping Statistics Delta – Rustin">
+  <meta name="og:description" content="">
+  <meta name="og:site_name" content="Rustin">
+  <meta name="og:url" content="http://localhost:4000/batch-dumping-stats-delta/">
+  
+  <meta name="og:image" content="http://localhost:4000/static/default_image.jpg">
+  
+  <meta property="article:published_time" content=" 2024-12-14">
+
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:site" content="@hi_rustin">
+  <meta name="twitter:domain" content="rustin.me">
+  <meta name="twitter:title" content="Batch Dumping Statistics Delta – Rustin">
+  <meta name="twitter:description" content="">
+  
+  <meta name="twitter:image" content="http://localhost:4000/static/default_image.jpg">
+  
+  <meta name="twitter:url" content="http://localhost:4000/batch-dumping-stats-delta/">
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/anchor-js/3.2.0/anchor.min.js"></script>
+</head>
+
+<body>
+  <header>
+    <h1><a href="/">Rustin</a></h1>
+    <span>I’m a passionate software engineer who specializes in distributed systems and dev tools.</span>
+  </header>
+
+  <div class="content post">
+    <h2>Batch Dumping Statistics Delta</h2>
+    <p class="date">14 December 2024</p>
+
+    <h1 id="background">Background</h1>
+
+<p>Recently, we have been tackling the challenge of supporting 3 million tables within a single TiDB cluster. One of the most significant hurdles we’ve faced is optimizing the performance of statistics collection. In its current implementation, TiDB gathers basic table information from all servers and consolidates it into a single system table. While functional, this approach becomes highly inefficient when managing millions of tables, consuming excessive CPU and memory resources and taking a considerable amount of time.</p>
+
+<p>In this blog post, I’ll introduce a new batch processing approach for writing table information to the system table. This method not only improves efficiency but also significantly reduces resource consumption. Let’s dive in!</p>
+
+<h1 id="statistics-delta">Statistics Delta</h1>
+
+<h2 id="what-is-statistics-delta">What is Statistics Delta?</h2>
+
+<p>Statistics play a crucial role in optimizing query plans. In TiDB, the owner node is responsible for collecting statistics and storing them in system tables. To ensure that the statistics accurately reflect the current data distribution, they need to be updated periodically. This raises an important question: When is the optimal time to collect these statistics?</p>
+
+<p>In TiDB, we primarily use Data Manipulation Language (DML) changes to determine when to update the statistics. This method is known as the statistics delta. The statistics delta consists of three fields: <code class="language-plaintext highlighter-rouge">modify_count</code>, <code class="language-plaintext highlighter-rouge">count</code>, and <code class="language-plaintext highlighter-rouge">version</code>. The <code class="language-plaintext highlighter-rouge">modify_count</code> field tracks the number of changes made to the table (DELETE/INSERT/UPDATE), the <code class="language-plaintext highlighter-rouge">count</code> field records the total number of rows in the table, and the <code class="language-plaintext highlighter-rouge">version</code> field identifies the version of the statistics.</p>
+
+<p>TiDB stores the statistics delta in the <code class="language-plaintext highlighter-rouge">mysql.stats_meta</code> table. This table contains a row for each table in the database, with each row holding the statistics delta for that table.
+For example, when you insert a row into a table, the <code class="language-plaintext highlighter-rouge">modify_count</code> field increases by one, and the <code class="language-plaintext highlighter-rouge">count</code> field also increases by one. Conversely, when you delete a row, the <code class="language-plaintext highlighter-rouge">modify_count</code> field increases by one, but the <code class="language-plaintext highlighter-rouge">count</code> field decreases by one. When you update a row, the <code class="language-plaintext highlighter-rouge">modify_count</code> field increases by one, while the <code class="language-plaintext highlighter-rouge">count</code> field remains unchanged.</p>
+
+<p>After collecting the statistics delta, TiDB owner nodes use this information to initiate the statistics collection process. Therefore, it is crucial to ensure that the statistics delta is as accurate and up-to-date as possible.</p>
+
+<h2 id="how-to-collect-statistics-delta">How to collect statistics delta?</h2>
+
+<p>Since every node in the TiDB cluster can modify the data, it is necessary to collect the statistics delta from all nodes. To accomplish this, we use a single system table to store the statistics delta. However, it is not feasible to keep the statistics delta in the system table updated in real-time. Therefore, we periodically update the statistics delta in the system table to ensure it remains as current as possible.</p>
+
+<p>In the current implementation, whenever TiDB commits a transaction, it updates the statistics delta for the current session. Every 2 minutes, TiDB aggregates these deltas and writes them to the system table. Each TiDB server can have many sessions, so we need to collect statistics changes from all sessions. TiDB uses a linked list to store the statistics delta for each session. When it is time to dump the statistics delta to the system table, TiDB traverses the linked list to gather the deltas from each session.</p>
+
+<div class="language-go highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">type</span> <span class="n">TableDelta</span> <span class="k">struct</span> <span class="p">{</span>
+	<span class="n">Delta</span>    <span class="kt">int64</span>
+	<span class="n">Count</span>    <span class="kt">int64</span>
+	<span class="n">ColSize</span>  <span class="k">map</span><span class="p">[</span><span class="kt">int64</span><span class="p">]</span><span class="kt">int64</span>
+	<span class="n">InitTime</span> <span class="n">time</span><span class="o">.</span><span class="n">Time</span> <span class="c">// InitTime is the time that this delta is generated.</span>
+	<span class="n">TableID</span>  <span class="kt">int64</span>
+<span class="p">}</span>
+
+<span class="k">type</span> <span class="n">TableDelta</span> <span class="k">struct</span> <span class="p">{</span>
+	<span class="n">delta</span> <span class="k">map</span><span class="p">[</span><span class="kt">int64</span><span class="p">]</span><span class="n">variable</span><span class="o">.</span><span class="n">TableDelta</span> <span class="c">// map[tableID]delta</span>
+	<span class="n">lock</span>  <span class="n">sync</span><span class="o">.</span><span class="n">Mutex</span>
+<span class="p">}</span>
+
+<span class="k">type</span> <span class="n">SessionStatsItem</span> <span class="k">struct</span> <span class="p">{</span>
+	<span class="n">mapper</span>     <span class="o">*</span><span class="n">TableDelta</span>
+	<span class="n">next</span>       <span class="o">*</span><span class="n">SessionStatsItem</span>
+	<span class="n">sync</span><span class="o">.</span><span class="n">Mutex</span>
+
+	<span class="c">// deleted is set to true when a session is closed.</span>
+	<span class="n">deleted</span> <span class="kt">bool</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>As illustrated in the code snippet above, the current implementation employs a linked list to store the statistics delta for each session, maintaining it in memory. Each session directly updates the table delta via the <code class="language-plaintext highlighter-rouge">SessionStatsItem</code>. When a session is closed, the <code class="language-plaintext highlighter-rouge">deleted</code> flag is set to true, and the session is subsequently removed from the linked list, ensuring it is no longer utilized.</p>
+
+<p>To manage the <code class="language-plaintext highlighter-rouge">SessionStatsItem</code> linked list, TiDB utilizes the <code class="language-plaintext highlighter-rouge">SessionStatsList</code> structure. This structure includes a pointer to the head of the linked list. Additionally, the <code class="language-plaintext highlighter-rouge">SessionStatsList</code> structure offers a method to traverse the linked list, consolidating the statistics delta from each session into a unified delta.</p>
+
+<div class="language-go highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">type</span> <span class="n">SessionStatsList</span> <span class="k">struct</span> <span class="p">{</span>
+	<span class="c">// tableDelta contains all the delta map from collectors when we dump them to KV.</span>
+	<span class="n">tableDelta</span> <span class="o">*</span><span class="n">TableDelta</span>
+
+	<span class="o">...</span> <span class="c">// other fields</span>
+
+	<span class="c">// listHead contains all the stats collector required by session.</span>
+	<span class="n">listHead</span> <span class="o">*</span><span class="n">SessionStatsItem</span>
+<span class="p">}</span>
+
+<span class="c">// SweepSessionStatsList will loop over the list, merge each session's local stats into handle</span>
+<span class="c">// and remove closed session's collector.</span>
+<span class="k">func</span> <span class="p">(</span><span class="n">sl</span> <span class="o">*</span><span class="n">SessionStatsList</span><span class="p">)</span> <span class="n">SweepSessionStatsList</span><span class="p">()</span> <span class="p">{</span>
+	<span class="n">deltaMap</span> <span class="o">:=</span> <span class="n">NewTableDelta</span><span class="p">()</span>
+	<span class="o">...</span>
+	<span class="n">prev</span> <span class="o">:=</span> <span class="n">sl</span><span class="o">.</span><span class="n">listHead</span>
+	<span class="n">prev</span><span class="o">.</span><span class="n">Lock</span><span class="p">()</span>
+	<span class="k">for</span> <span class="n">curr</span> <span class="o">:=</span> <span class="n">prev</span><span class="o">.</span><span class="n">next</span><span class="p">;</span> <span class="n">curr</span> <span class="o">!=</span> <span class="no">nil</span><span class="p">;</span> <span class="n">curr</span> <span class="o">=</span> <span class="n">curr</span><span class="o">.</span><span class="n">next</span> <span class="p">{</span>
+		<span class="n">curr</span><span class="o">.</span><span class="n">Lock</span><span class="p">()</span>
+		<span class="c">// Merge the session stats into deltaMap respectively.</span>
+		<span class="n">merge</span><span class="p">(</span><span class="n">curr</span><span class="p">,</span> <span class="n">deltaMap</span><span class="p">,</span> <span class="n">colMap</span><span class="p">)</span>
+		<span class="k">if</span> <span class="n">curr</span><span class="o">.</span><span class="n">deleted</span> <span class="p">{</span>
+			<span class="n">prev</span><span class="o">.</span><span class="n">next</span> <span class="o">=</span> <span class="n">curr</span><span class="o">.</span><span class="n">next</span>
+			<span class="n">curr</span><span class="o">.</span><span class="n">Unlock</span><span class="p">()</span>
+		<span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+			<span class="n">prev</span><span class="o">.</span><span class="n">Unlock</span><span class="p">()</span>
+			<span class="n">prev</span> <span class="o">=</span> <span class="n">curr</span>
+		<span class="p">}</span>
+	<span class="p">}</span>
+	<span class="n">prev</span><span class="o">.</span><span class="n">Unlock</span><span class="p">()</span>
+	<span class="n">sl</span><span class="o">.</span><span class="n">tableDelta</span><span class="o">.</span><span class="n">Merge</span><span class="p">(</span><span class="n">deltaMap</span><span class="o">.</span><span class="n">GetDeltaAndReset</span><span class="p">())</span>
+    <span class="o">...</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>Here is an example of the in-memory data for each session:</p>
+
+<p><a href="https://editor.plantuml.com/uml/dPLDQy8m6CVl_HH_SbP8iZatJy8yJF1MTzajMpFe5bCn4SP6l_jCcInjNeg2K7pUmlFxaNPfh3ZO3zFeugS0G4ffJDteqWfhDhMnP84kuN9Ml2gvaieAB-eILHXpOKPP47JnymXsDmboZyrHkqFvGoodolfRkfd4JMQKJa2ugwQq3UlNkhRRUkSQ2AVyTihubC-tZ2we-xsGi6NhLbolkk6ibst___b74TMyVRe3DgUdh4WnA27g1F59Ycg0R2VsUta8cSLHPcZ20peB5eA7bD54-YAgk0eiicpHmui-ONYGdxNgOHwK4Ys_RCWqmHevtCWIXmVz9hOiFExpTC6bv967Fql2nnX_31KWi82yYB0XhWDP8nYHWZ4lyDJS9r30lnKyMtI58MGbiVGD-UiTyuI8AiHiOLHOjEsiJH-L2fCdET9Azpfx5yh8hFzaRU_Ingkw5TkYBPPILzq7wXS0"><img src="https://img.plantuml.biz/plantuml/png/dPLDQy8m6CVl_HH_SbP8iZatJy8yJF1MTzajMpFe5bCn4SP6l_jCcInjNeg2K7pUmlFxaNPfh3ZO3zFeugS0G4ffJDteqWfhDhMnP84kuN9Ml2gvaieAB-eILHXpOKPP47JnymXsDmboZyrHkqFvGoodolfRkfd4JMQKJa2ugwQq3UlNkhRRUkSQ2AVyTihubC-tZ2we-xsGi6NhLbolkk6ibst___b74TMyVRe3DgUdh4WnA27g1F59Ycg0R2VsUta8cSLHPcZ20peB5eA7bD54-YAgk0eiicpHmui-ONYGdxNgOHwK4Ys_RCWqmHevtCWIXmVz9hOiFExpTC6bv967Fql2nnX_31KWi82yYB0XhWDP8nYHWZ4lyDJS9r30lnKyMtI58MGbiVGD-UiTyuI8AiHiOLHOjEsiJH-L2fCdET9Azpfx5yh8hFzaRU_Ingkw5TkYBPPILzq7wXS0" alt="SessionStatsList" /></a></p>
+
+<p>After merging the statistics delta from each session, TiDB writes the aggregated delta to the system table.</p>
+
+<div class="language-go highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">func</span> <span class="p">(</span><span class="n">s</span> <span class="o">*</span><span class="n">statsUsageImpl</span><span class="p">)</span> <span class="n">DumpStatsDeltaToKV</span><span class="p">(</span><span class="n">dumpAll</span> <span class="kt">bool</span><span class="p">)</span> <span class="kt">error</span> <span class="p">{</span>
+	<span class="o">...</span>
+	<span class="n">s</span><span class="o">.</span><span class="n">SweepSessionStatsList</span><span class="p">()</span>
+	<span class="n">deltaMap</span> <span class="o">:=</span> <span class="n">s</span><span class="o">.</span><span class="n">SessionTableDelta</span><span class="p">()</span><span class="o">.</span><span class="n">GetDeltaAndReset</span><span class="p">()</span>
+	<span class="k">defer</span> <span class="k">func</span><span class="p">()</span> <span class="p">{</span>
+		<span class="n">s</span><span class="o">.</span><span class="n">SessionTableDelta</span><span class="p">()</span><span class="o">.</span><span class="n">Merge</span><span class="p">(</span><span class="n">deltaMap</span><span class="p">)</span>
+	<span class="p">}()</span>
+
+	<span class="k">return</span> <span class="n">utilstats</span><span class="o">.</span><span class="n">CallWithSCtx</span><span class="p">(</span><span class="n">s</span><span class="o">.</span><span class="n">statsHandle</span><span class="o">.</span><span class="n">SPool</span><span class="p">(),</span> <span class="k">func</span><span class="p">(</span><span class="n">sctx</span> <span class="n">sessionctx</span><span class="o">.</span><span class="n">Context</span><span class="p">)</span> <span class="kt">error</span> <span class="p">{</span>
+		<span class="n">is</span> <span class="o">:=</span> <span class="n">sctx</span><span class="o">.</span><span class="n">GetDomainInfoSchema</span><span class="p">()</span><span class="o">.</span><span class="p">(</span><span class="n">infoschema</span><span class="o">.</span><span class="n">InfoSchema</span><span class="p">)</span>
+		<span class="n">currentTime</span> <span class="o">:=</span> <span class="n">time</span><span class="o">.</span><span class="n">Now</span><span class="p">()</span>
+		<span class="k">for</span> <span class="n">id</span><span class="p">,</span> <span class="n">item</span> <span class="o">:=</span> <span class="k">range</span> <span class="n">deltaMap</span> <span class="p">{</span>
+			<span class="k">if</span> <span class="o">!</span><span class="n">s</span><span class="o">.</span><span class="n">needDumpStatsDelta</span><span class="p">(</span><span class="n">is</span><span class="p">,</span> <span class="n">dumpAll</span><span class="p">,</span> <span class="n">id</span><span class="p">,</span> <span class="n">item</span><span class="p">,</span> <span class="n">currentTime</span><span class="p">)</span> <span class="p">{</span>
+				<span class="k">continue</span>
+			<span class="p">}</span>
+			<span class="n">updated</span><span class="p">,</span> <span class="n">err</span> <span class="o">:=</span> <span class="n">s</span><span class="o">.</span><span class="n">dumpTableStatCountToKV</span><span class="p">(</span><span class="n">is</span><span class="p">,</span> <span class="n">id</span><span class="p">,</span> <span class="n">item</span><span class="p">)</span>
+			<span class="k">if</span> <span class="n">err</span> <span class="o">!=</span> <span class="no">nil</span> <span class="p">{</span>
+				<span class="k">return</span> <span class="n">errors</span><span class="o">.</span><span class="n">Trace</span><span class="p">(</span><span class="n">err</span><span class="p">)</span>
+			<span class="p">}</span>
+			<span class="k">if</span> <span class="n">updated</span> <span class="p">{</span>
+				<span class="n">UpdateTableDeltaMap</span><span class="p">(</span><span class="n">deltaMap</span><span class="p">,</span> <span class="n">id</span><span class="p">,</span> <span class="o">-</span><span class="n">item</span><span class="o">.</span><span class="n">Delta</span><span class="p">,</span> <span class="o">-</span><span class="n">item</span><span class="o">.</span><span class="n">Count</span><span class="p">,</span> <span class="no">nil</span><span class="p">)</span>
+			<span class="p">}</span>
+			<span class="k">if</span> <span class="n">err</span> <span class="o">=</span> <span class="n">storage</span><span class="o">.</span><span class="n">DumpTableStatColSizeToKV</span><span class="p">(</span><span class="n">sctx</span><span class="p">,</span> <span class="n">id</span><span class="p">,</span> <span class="n">item</span><span class="p">);</span> <span class="n">err</span> <span class="o">!=</span> <span class="no">nil</span> <span class="p">{</span>
+				<span class="nb">delete</span><span class="p">(</span><span class="n">deltaMap</span><span class="p">,</span> <span class="n">id</span><span class="p">)</span>
+				<span class="k">return</span> <span class="n">errors</span><span class="o">.</span><span class="n">Trace</span><span class="p">(</span><span class="n">err</span><span class="p">)</span>
+			<span class="p">}</span>
+			<span class="k">if</span> <span class="n">updated</span> <span class="p">{</span>
+				<span class="nb">delete</span><span class="p">(</span><span class="n">deltaMap</span><span class="p">,</span> <span class="n">id</span><span class="p">)</span>
+			<span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+				<span class="n">m</span> <span class="o">:=</span> <span class="n">deltaMap</span><span class="p">[</span><span class="n">id</span><span class="p">]</span>
+				<span class="n">m</span><span class="o">.</span><span class="n">ColSize</span> <span class="o">=</span> <span class="no">nil</span>
+				<span class="n">deltaMap</span><span class="p">[</span><span class="n">id</span><span class="p">]</span> <span class="o">=</span> <span class="n">m</span>
+			<span class="p">}</span>
+		<span class="p">}</span>
+		<span class="k">return</span> <span class="no">nil</span>
+	<span class="p">})</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>However, this function is inefficient. It processes each item individually, which is both time-consuming and resource-intensive. Each item requires a separate transaction, and each transaction incurs overhead due to the need to lock the table and write data to storage.</p>
+
+<h2 id="performance-issues">Performance Issues</h2>
+
+<p>After testing the current implementation with 3 million tables, we observed significant performance issues. In high-load clusters, the statistics delta is updated frequently, generating a large volume of transactions that degrade performance. The root cause lies in the <code class="language-plaintext highlighter-rouge">DumpStatsDeltaToKV</code> function, where each execution triggers query compilation over 100,000 times, resulting in substantial CPU overhead.</p>
+
+<p>Examining the <code class="language-plaintext highlighter-rouge">Stats Meta Updating Duration</code> metric reveals that the time required to update the statistics delta is excessively high.</p>
+
+<p><img src="https://github.com/user-attachments/assets/706b208b-47e5-448b-8f14-cfdc5cdc798a" alt="Stats Meta Updating Duration" /></p>
+
+<p>Further analysis of the CPU profile reveals that the <code class="language-plaintext highlighter-rouge">DumpStatsDeltaToKV</code> function is a major contributor to CPU consumption. A significant portion of the CPU time is spent on the <code class="language-plaintext highlighter-rouge">compile</code> function, highlighting it as a critical bottleneck.</p>
+
+<p><img src="https://github.com/user-attachments/assets/608be425-4330-4892-a6f5-5dacc649bc82" alt="CPU Profile" /></p>
+
+<p>It executes the following function over 100,000 times:</p>
+
+<div class="language-go highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c">// UpdateStatsMeta update the stats meta stat for this Table.</span>
+<span class="k">func</span> <span class="n">UpdateStatsMeta</span><span class="p">(</span>
+	<span class="n">ctx</span> <span class="n">context</span><span class="o">.</span><span class="n">Context</span><span class="p">,</span>
+	<span class="n">sctx</span> <span class="n">sessionctx</span><span class="o">.</span><span class="n">Context</span><span class="p">,</span>
+	<span class="n">startTS</span> <span class="kt">uint64</span><span class="p">,</span>
+	<span class="n">delta</span> <span class="n">variable</span><span class="o">.</span><span class="n">TableDelta</span><span class="p">,</span>
+	<span class="n">id</span> <span class="kt">int64</span><span class="p">,</span>
+	<span class="n">isLocked</span> <span class="kt">bool</span><span class="p">,</span>
+<span class="p">)</span> <span class="p">(</span><span class="n">err</span> <span class="kt">error</span><span class="p">)</span> <span class="p">{</span>
+	<span class="o">...</span>
+	<span class="c">// use INSERT INTO ... ON DUPLICATE KEY UPDATE here to fill missing stats_meta.</span>
+	<span class="n">_</span><span class="p">,</span> <span class="n">err</span> <span class="o">=</span> <span class="n">statsutil</span><span class="o">.</span><span class="n">ExecWithCtx</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="n">sctx</span><span class="p">,</span> <span class="s">"insert into mysql.stats_meta (version, table_id, modify_count, count) values (%?, %?, %?, 0) on duplicate key "</span><span class="o">+</span>
+		<span class="s">"update version = values(version), modify_count = modify_count + values(modify_count), count = if(count &gt; %?, count - %?, 0)"</span><span class="p">,</span>
+		<span class="n">startTS</span><span class="p">,</span> <span class="n">id</span><span class="p">,</span> <span class="n">delta</span><span class="o">.</span><span class="n">Count</span><span class="p">,</span> <span class="o">-</span><span class="n">delta</span><span class="o">.</span><span class="n">Delta</span><span class="p">,</span> <span class="o">-</span><span class="n">delta</span><span class="o">.</span><span class="n">Delta</span><span class="p">)</span>
+	<span class="o">...</span>
+	<span class="k">return</span> <span class="n">err</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>To address these performance issues, we need to find a more efficient way to update the statistics delta without processing each item individually. However, <strong>we must ensure that this solution does not consume additional CPU and memory resources.</strong> Therefore, simply adding more concurrent workers to process the items in parallel is not a viable option.</p>
+
+<h1 id="batch-dumping-statistics-delta">Batch Dumping Statistics Delta</h1>
+
+<h2 id="design">Design</h2>
+
+<p>To enhance the performance of updating the statistics delta, we propose a new approach: batch dumping statistics delta. This method aggregates the statistics delta from all sessions and writes it to the system table in a single transaction/query. By batching the updates, we can significantly reduce the number of transactions required, thereby improving performance and reducing resource consumption.</p>
+
+<p>We change above <code class="language-plaintext highlighter-rouge">UpdateStatsMeta</code> function to take a slice of <code class="language-plaintext highlighter-rouge">TableDelta</code> as input, and update the statistics delta in a single transaction.</p>
+
+<div class="language-go highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">type</span> <span class="n">DeltaUpdate</span> <span class="k">struct</span> <span class="p">{</span>
+	<span class="n">Delta</span>    <span class="n">variable</span><span class="o">.</span><span class="n">TableDelta</span>
+	<span class="n">TableID</span>  <span class="kt">int64</span>
+	<span class="n">IsLocked</span> <span class="kt">bool</span>
+<span class="p">}</span>
+
+<span class="k">func</span> <span class="n">UpdateStatsMeta</span><span class="p">(</span>
+	<span class="n">ctx</span> <span class="n">context</span><span class="o">.</span><span class="n">Context</span><span class="p">,</span>
+	<span class="n">sctx</span> <span class="n">sessionctx</span><span class="o">.</span><span class="n">Context</span><span class="p">,</span>
+	<span class="n">startTS</span> <span class="kt">uint64</span><span class="p">,</span>
+	<span class="n">updates</span> <span class="o">...*</span><span class="n">DeltaUpdate</span><span class="p">,</span>
+<span class="p">)</span> <span class="p">(</span><span class="n">err</span> <span class="kt">error</span><span class="p">)</span> <span class="p">{</span>
+	<span class="o">...</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>Within the <code class="language-plaintext highlighter-rouge">UpdateStatsMeta</code> function, we continue to use the <code class="language-plaintext highlighter-rouge">INSERT INTO ... ON DUPLICATE KEY UPDATE</code> statement to update the statistics delta. However, we now specify multiple values in the <code class="language-plaintext highlighter-rouge">INSERT INTO</code> statement, allowing us to update the statistics delta in a single transaction.</p>
+
+<div class="language-go highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">sql</span> <span class="o">:=</span> <span class="n">fmt</span><span class="o">.</span><span class="n">Sprintf</span><span class="p">(</span><span class="s">"insert into mysql.stats_meta (version, table_id, modify_count, count) values %s "</span><span class="o">+</span>
+	<span class="s">"on duplicate key update version = values(version), modify_count = modify_count + values(modify_count), "</span><span class="o">+</span>
+	<span class="s">"count = count + values(count)"</span><span class="p">,</span> <span class="n">strings</span><span class="o">.</span><span class="n">Join</span><span class="p">(</span><span class="n">unlockedPosValues</span><span class="p">,</span> <span class="s">","</span><span class="p">))</span>
+<span class="k">if</span> <span class="n">_</span><span class="p">,</span> <span class="n">err</span> <span class="o">=</span> <span class="n">statsutil</span><span class="o">.</span><span class="n">ExecWithCtx</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="n">sctx</span><span class="p">,</span> <span class="n">sql</span><span class="p">);</span> <span class="n">err</span> <span class="o">!=</span> <span class="no">nil</span> <span class="p">{</span>
+	<span class="k">return</span> <span class="n">err</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<h2 id="test-results">Test Results</h2>
+
+<p>I have submitted a PR to implement this new approach. After testing the batch dumping statistics delta method, we observed a significant improvement in performance. You can view the PR <a href="https://github.com/pingcap/tidb/pull/58331">here</a>.</p>
+
+<p>The duration dropped from 40 minutes to 20 seconds, as shown in the following screenshot:</p>
+
+<p><img src="https://github.com/user-attachments/assets/cb8561a4-bda0-4c66-91a6-ea6777e7012a" alt="Stats Meta Updating Duration" /></p>
+
+<p>In the CPU profile, the <code class="language-plaintext highlighter-rouge">DumpStatsDeltaToKV</code> function no longer consumes a significant amount of CPU time. The <code class="language-plaintext highlighter-rouge">compile</code> function is no longer a bottleneck, as the number of executions has been reduced to a more manageable level.</p>
+
+<h2 id="tuning-the-batch-size">Tuning the Batch Size</h2>
+
+<p>To achieve optimal performance, it is essential to identify the ideal batch size for updating the statistics delta. Through testing various batch sizes, we determined that a batch size of 100,000 items delivers the best results. This configuration balances efficiency and resource utilization, ensuring the update process is both fast and resource-efficient.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>Batch Size</th>
+      <th>Duration</th>
+      <th>Metric</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>5000</td>
+      <td>~40 sec</td>
+      <td><a href="https://github.com/user-attachments/assets/fb4af677-da64-41eb-a475-8968a5d50c9b">Stats Meta Updating Duration</a></td>
+    </tr>
+    <tr>
+      <td>10000</td>
+      <td>20-40 sec; Most 40 sec</td>
+      <td><a href="https://github.com/user-attachments/assets/a16f826a-81e6-43ed-aa7e-ef8d9f982960">Stats Meta Updating Duration</a></td>
+    </tr>
+    <tr>
+      <td>50000</td>
+      <td>20-40 sec; Most 20 sec</td>
+      <td><a href="https://github.com/user-attachments/assets/7871f8ba-daf2-41af-b99b-36a5e6f27468">Stats Meta Updating Duration</a></td>
+    </tr>
+    <tr>
+      <td>100000</td>
+      <td>~20 sec</td>
+      <td><a href="https://github.com/user-attachments/assets/cb8561a4-bda0-4c66-91a6-ea6777e7012a">Stats Meta Updating Duration</a></td>
+    </tr>
+  </tbody>
+</table>
+
+<h1 id="conclusion">Conclusion</h1>
+
+<p>The new batch dumping approach for the statistics delta has significantly enhanced TiDB statistics update performance. This method aggregates deltas from all sessions into a single transaction, minimizing overhead and resource consumption while ensuring an efficient update process, even in large-scale deployments.</p>
+
+
+    <p class="signature">&mdash; Rustin</p>
+  </div>
+  <script>
+    (function () {
+      anchors.options.placement = 'right';
+      anchors.add('.content > h3, .content > h4, .content > h5, .content > h6');
+    })();
+  </script>
+  <script src="https://giscus.app/client.js" data-repo="Rustin170506/blog"
+    data-repo-id="MDEwOlJlcG9zaXRvcnkyMTU4MDI0NDg=" data-category="Ideas" data-category-id="DIC_kwDODNziUM4CY_bg"
+    data-mapping="title" data-strict="0" data-reactions-enabled="1" data-emit-metadata="0" data-input-position="top"
+    data-theme="light" data-lang="en" data-loading="lazy" crossorigin="anonymous" async>
+    </script>
+</body>
+
+</html>

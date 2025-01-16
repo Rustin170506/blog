@@ -1,0 +1,76 @@
+baseURL = 'https://rustin.me/'
+buildDrafts = false
+buildExpired = false
+buildFuture = false
+copyright = '© 2025 Rustin'
+enableEmoji = true
+enableInlineShortcodes = true
+enableRobotsTXT = true
+languageCode = 'en-us'
+mainSections = ['posts']
+pygmentsUseClasses = true
+theme = 'PaperMod'
+title = 'Rustin'
+
+[params]
+ShowAllPagesInArchive = true
+ShowBreadCrumbs = true
+ShowCodeCopyButtons = true
+ShowPageNums = true
+ShowPostNavLinks = true
+ShowReadingTime = true
+ShowRssButtonInSectionTermList = true
+ShowShareButtons = true
+ShowToc = true
+author = "Rustin liu"
+defaultTheme = "auto"
+description = "Rustin's personal blog"
+displayFullLangName = true
+env = "production"
+
+[outputs]
+home = ["HTML", "RSS", "JSON"]
+
+[languages.en]
+languageName = "English"
+weight = 1
+
+[[languages.en.menu.main]]
+name = "About"
+url = "about"
+weight = 10
+
+[[languages.en.menu.main]]
+name = "Presentations"
+url = "presentations/"
+weight = 10
+
+[[languages.en.menu.main]]
+name = "Search"
+url = "search/"
+weight = 10
+
+[[languages.en.menu.main]]
+name = "Tags"
+url = "tags/"
+weight = 10
+
+[params.homeInfoParams]
+Content = """
+👋 My name is Rustin Liu and I’m a passionate software engineer who specializes in distributed systems and dev tools.
+"""
+Title = "Rustin Liu"
+
+[[params.socialIcons]]
+name = "github"
+title = "View Source on Github"
+url = "https://github.com/adityatelange/hugo-PaperMod"
+
+[[params.socialIcons]]
+name = "YouTube"
+title = "YouTube"
+url = "https://www.youtube.com/@rustin1024"
+
+
+[markup.goldmark.renderer]
+unsafe = true

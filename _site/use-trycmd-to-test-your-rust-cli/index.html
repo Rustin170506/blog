@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>How to use trycmd to test your Rust CLI? - Rustin</title>
+  <link rel="stylesheet" href="https://netdna.bootstrapcdn.com/bootstrap/3.1.1/css/bootstrap.min.css" type="text/css">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Merriweather+Sans:400,300,700" type="text/css">
+  <link rel="stylesheet" href="/static/app.css" type="text/css">
+  <link rel="stylesheet" href="/static/syntax.css" type="text/css">
+  <link type="application/atom+xml" rel="alternate" href="http://localhost:4000/feed.xml" />
+  <meta name="theme-color" content="#111111">
+
+  <meta name="og:type" content="article">
+  <meta name="og:title" content="How to use trycmd to test your Rust CLI? – Rustin">
+  <meta name="og:description" content="">
+  <meta name="og:site_name" content="Rustin">
+  <meta name="og:url" content="http://localhost:4000/use-trycmd-to-test-your-rust-cli/">
+  
+  <meta name="og:image" content="http://localhost:4000/static/default_image.jpg">
+  
+  <meta property="article:published_time" content=" 2023-07-03">
+
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:site" content="@hi_rustin">
+  <meta name="twitter:domain" content="rustin.me">
+  <meta name="twitter:title" content="How to use trycmd to test your Rust CLI? – Rustin">
+  <meta name="twitter:description" content="">
+  
+  <meta name="twitter:image" content="http://localhost:4000/static/default_image.jpg">
+  
+  <meta name="twitter:url" content="http://localhost:4000/use-trycmd-to-test-your-rust-cli/">
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/anchor-js/3.2.0/anchor.min.js"></script>
+</head>
+
+<body>
+  <header>
+    <h1><a href="/">Rustin</a></h1>
+    <span>I’m a passionate software engineer who specializes in distributed systems and dev tools.</span>
+  </header>
+
+  <div class="content post">
+    <h2>How to use trycmd to test your Rust CLI?</h2>
+    <p class="date">03 July 2023</p>
+
+    <p>Recently we released <a href="https://blog.rust-lang.org/2023/04/25/Rustup-1.26.0.html">Rustup 1.26.0</a>, which includes a bunch of new features and bug fixes. We also upgraded the <a href="https://github.com/clap-rs/clap">clap</a> version to 3.2.25, which is a major version upgrade. This upgrade was a bit tricky, because clap 3.0.0 had a lot of breaking changes. We needed to make sure that the new version of Rustup worked as expected. So before we upgraded clap we added <a href="https://github.com/rust-lang/rustup/blob/master/tests/suite/cli_ui.rs">UI tests</a> for Rustup. We use <a href="https://github.com/assert-rs/trycmd">trycmd</a> to test the CLI of Rustup. In this post I will show you how to use <code class="language-plaintext highlighter-rouge">trycmd</code> to test your CLI.</p>
+
+<h2 id="why-trycmd">Why trycmd?</h2>
+
+<p>Because it is very easy to use and well developed. It is also very easy to integrate with CI. We can use <code class="language-plaintext highlighter-rouge">cargo test</code> to run the test cases. Most importantly, <code class="language-plaintext highlighter-rouge">trcmd</code> is recommended by the <code class="language-plaintext highlighter-rouge">clap</code> team. You can find its document in the <a href="https://github.com/clap-rs/clap/blob/master/CHANGELOG.md#migrating">clap upgrade guide</a>.</p>
+
+<h2 id="what-is-trycmd">What is trycmd?</h2>
+
+<p>From the <a href="https://github.com/assert-rs/trycmd/blob/main/README.md">README</a> of <code class="language-plaintext highlighter-rouge">trycmd</code>: “<code class="language-plaintext highlighter-rouge">trycmd</code> is a test harness that will enumerate test case files and run them to verify the results, taking inspiration from <a href="https://crates.io/crates/trybuild">trybuild</a> and <a href="https://bitheap.org/cram/">cram</a>.”</p>
+
+<p>Here is an example:</p>
+
+<div class="language-rust highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c">// tests/cli_tests.rs</span>
+<span class="nd">#[test]</span>
+<span class="k">fn</span> <span class="nf">cli_tests</span><span class="p">()</span> <span class="p">{</span>
+    <span class="nn">trycmd</span><span class="p">::</span><span class="nn">TestCases</span><span class="p">::</span><span class="nf">new</span><span class="p">()</span>
+        <span class="nf">.case</span><span class="p">(</span><span class="s">"tests/cmd/*.toml"</span><span class="p">)</span>
+        <span class="nf">.case</span><span class="p">(</span><span class="s">"README.md"</span><span class="p">);</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>We can use <code class="language-plaintext highlighter-rouge">trycmd::TestCases::new()</code> to create a new test case. Then we can use <code class="language-plaintext highlighter-rouge">.case()</code> to add test cases. The argument of <code class="language-plaintext highlighter-rouge">.case()</code> is a glob pattern. It will enumerate all the files that match the pattern and run them as test cases.</p>
+
+<p>In this example, we used <code class="language-plaintext highlighter-rouge">tests/cmd/*.toml</code> to match all the files in <code class="language-plaintext highlighter-rouge">tests/cmd</code> that end with <code class="language-plaintext highlighter-rouge">.toml</code>. We also use <code class="language-plaintext highlighter-rouge">README.md</code> as a test case. The <code class="language-plaintext highlighter-rouge">README.md</code> file is a markdown file, but trycmd will treat it as a test case. It will run the command in the code block and verify the output, which is a very useful feature when you want to test the examples in your README.</p>
+
+<p>We can treat this test case as a normal test case and run it with <code class="language-plaintext highlighter-rouge">cargo test</code>.</p>
+
+<h2 id="how-to-write-a-test-case">How to write a test case?</h2>
+
+<p>We have two types of test cases available: TOML files and Markdown files. The TOML file provides more flexibility compared to the Markdown file. It allows us to test command line arguments, command output, and even the exit code of the command. On the other hand, the Markdown file is a simpler option that allows us to focus on testing the output of the command.</p>
+
+<p>In clap documentation, you can find a <a href="https://github.com/assert-rs/trycmd/tree/main/examples/demo_trycmd">simple example</a> of trycmd. But it only tests a Markdown file. In this post, I will show you how to write a TOML file and a Markdown file test. You can find more examples from some real projects, like <a href="https://github.com/crate-ci/typos/blob/master/crates/typos-cli/tests/cli_tests.rs">typos tests</a>, <a href="https://github.com/clap-rs/clap/tree/master/tests/ui">clap tests</a> and <a href="https://github.com/rust-lang/rustup/blob/master/tests/suite/cli_ui.rs">rustup tests</a>.</p>
+
+<h3 id="toml-file">TOML file</h3>
+
+<p>Here is an example of a TOML file:</p>
+
+<div class="language-toml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># tests/cmd/help.toml</span>
+<span class="py">bin.name</span> <span class="p">=</span> <span class="s">"YOUR_BIN_NAME"</span>
+<span class="py">args</span> <span class="p">=</span> <span class="nn">["--help"]</span>
+<span class="py">status.code</span> <span class="p">=</span> <span class="mi">0</span>
+<span class="py">stdout</span> <span class="p">=</span> <span class="s">"""
+HELP MESSAGE
+"""</span>
+<span class="py">stderr</span> <span class="p">=</span> <span class="s">""</span>
+</code></pre></div></div>
+
+<p>We can use <code class="language-plaintext highlighter-rouge">bin.name</code> for the binary name, <code class="language-plaintext highlighter-rouge">args</code> for command arguments, <code class="language-plaintext highlighter-rouge">status.code</code> for the exit code, and <code class="language-plaintext highlighter-rouge">stdout</code> and <code class="language-plaintext highlighter-rouge">stderr</code> for command output.</p>
+
+<p>If your CLI requires reading input files, you can organize them in a separate directory with the same name but with a <code class="language-plaintext highlighter-rouge">.in</code> suffix. For instance, if your CLI needs to read a file called <code class="language-plaintext highlighter-rouge">input.txt</code> and your test case is located at <code class="language-plaintext highlighter-rouge">tests/cmd/input.toml</code>, you can place the <code class="language-plaintext highlighter-rouge">input.txt</code> file in the directory <code class="language-plaintext highlighter-rouge">tests/cmd/input.in/input.txt</code>. This naming convention helps to distinguish input files from other files and maintain a structured organization for your test cases.</p>
+
+<div class="language-toml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># tests/cmd/input.toml</span>
+<span class="py">bin.name</span> <span class="p">=</span> <span class="s">"YOUR_BIN_NAME"</span>
+<span class="py">status.code</span> <span class="p">=</span> <span class="mi">0</span>
+<span class="py">stdout</span> <span class="p">=</span> <span class="s">""</span>
+<span class="py">stderr</span> <span class="p">=</span> <span class="s">""</span>
+</code></pre></div></div>
+
+<div class="language-console highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="go">tree tests/cmd
+</span><span class="c">.
+</span><span class="go">├── input.toml
+└── input.in
+    └── input.txt
+</span></code></pre></div></div>
+
+<p>If your CLI involves writing output files, you can utilize a directory with the same name as the test file but with a <code class="language-plaintext highlighter-rouge">.out</code> suffix to store the generated output files. For instance, if your CLI reads the <code class="language-plaintext highlighter-rouge">input.txt</code> file and writes the <code class="language-plaintext highlighter-rouge">output.txt</code> file, you can place the <code class="language-plaintext highlighter-rouge">output.txt</code> file in the directory <code class="language-plaintext highlighter-rouge">tests/cmd/input.out/output.txt</code>.</p>
+
+<div class="language-console highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="go">tree tests/cmd
+</span><span class="c">.
+</span><span class="go">├── input.toml
+├── input.in
+│   └── input.txt
+└── input.out
+    ├── input.txt
+    └── output.txt
+</span></code></pre></div></div>
+
+<p><code class="language-plaintext highlighter-rouge">trycmd</code> will compare the output file with the expected output file. If they are different, the test will fail.</p>
+
+<h3 id="markdown-file">Markdown file</h3>
+
+<p>In markdown files, we can utilize either the <code class="language-plaintext highlighter-rouge">console</code> or <code class="language-plaintext highlighter-rouge">trycmd</code> code block to represent test cases. Here’s an example:</p>
+
+<div class="language-md highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="p">```</span><span class="nl">console
+</span><span class="gp">$</span><span class="w"> </span><span class="nb">command</span> ...
+<span class="p">```</span>
+Or
+<span class="p">```</span><span class="nl">trycmd
+</span><span class="sb">$ command ...</span>
+<span class="p">```</span>
+</code></pre></div></div>
+
+<p>Sometimes, your test might include output that is generated at runtime. When that’s the case, you can use variables to replace those values.</p>
+
+<div class="language-md highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="p">```</span><span class="nl">console
+</span><span class="gp">$</span><span class="w"> </span>simple <span class="s2">"blah blah runtime-value blah"</span>
+<span class="go">Hello blah blah [REPLACEMENT] blah!</span>
+<span class="p">```</span>
+</code></pre></div></div>
+
+<p>In this example, we used <code class="language-plaintext highlighter-rouge">[REPLACEMENT]</code> to indicate the runtime value. We can use <code class="language-plaintext highlighter-rouge">trycmd::TestCases::new().case("README.md").insert_var("REPLACEMENT", "runtime-value")</code> to replace the runtime value.</p>
+
+<div class="language-console highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="gp">$</span><span class="w"> </span>simple <span class="s2">"blah blah runtime-value blah"</span>
+<span class="go">Hello blah blah runtime-value blah!
+</span></code></pre></div></div>
+
+<p>The <code class="language-plaintext highlighter-rouge">console</code> code block will substitute [REPLACEMENT] with the value of the <code class="language-plaintext highlighter-rouge">REPLACEMENT</code> variable. The test will pass if the output is <code class="language-plaintext highlighter-rouge">Hello blah blah runtime-value blah!</code>. If the output differs from this expected value, the test will fail.</p>
+
+<h2 id="one-real-example">One Real Example</h2>
+
+<h3 id="create-a-cli">Create a CLI</h3>
+
+<ol>
+  <li>
+    <p><a href="https://github.com/Rustin170506/trycmd-example/commit/ead3a18e2502f23ee856fe1d3fca8109b6e867cb">Use <code class="language-plaintext highlighter-rouge">cargo new</code> to create a new CLI.</a></p>
+
+    <div class="language-sh highlighter-rouge"><div class="highlight"><pre class="highlight"><code> cargo new <span class="nt">--bin</span> trycmd-example
+</code></pre></div>    </div>
+  </li>
+  <li>
+    <p><a href="https://github.com/Rustin170506/trycmd-example/commit/a7b10c45ad04b2c2667d5c7c2b48e659018eb9a9">Add clap as a dependency with <code class="language-plaintext highlighter-rouge">derive</code> feature.</a></p>
+
+    <div class="language-sh highlighter-rouge"><div class="highlight"><pre class="highlight"><code> cargo add clap <span class="nt">--features</span> derive
+</code></pre></div>    </div>
+
+    <p>Check the <code class="language-plaintext highlighter-rouge">Cargo.toml</code> file. You should see the <code class="language-plaintext highlighter-rouge">clap</code> dependency.</p>
+
+    <div class="language-toml highlighter-rouge"><div class="highlight"><pre class="highlight"><code> <span class="c"># Cargo.toml</span>
+ <span class="nn">[package]</span>
+ <span class="py">name</span> <span class="p">=</span> <span class="s">"trycmd-example"</span>
+ <span class="py">version</span> <span class="p">=</span> <span class="s">"0.1.0"</span>
+ <span class="py">edition</span> <span class="p">=</span> <span class="s">"2021"</span>
+
+ <span class="c"># See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html</span>
+
+ <span class="nn">[dependencies]</span>
+ <span class="nn">clap</span> <span class="o">=</span> <span class="p">{</span> <span class="py">version</span> <span class="p">=</span> <span class="s">"4.3.10"</span><span class="p">,</span> <span class="py">features</span> <span class="p">=</span> <span class="nn">["derive"]</span> <span class="p">}</span>
+</code></pre></div>    </div>
+  </li>
+  <li>
+    <p><a href="https://github.com/Rustin170506/trycmd-example/commit/a9a227147b7918d7caa48c86095494f39a716d5d">Add a simple CLI.</a></p>
+
+    <div class="language-rust highlighter-rouge"><div class="highlight"><pre class="highlight"><code> <span class="c">// src/main.rs</span>
+ <span class="k">use</span> <span class="nn">clap</span><span class="p">::</span><span class="n">Parser</span><span class="p">;</span>
+
+ <span class="c">/// Simple program to greet a person</span>
+ <span class="nd">#[derive(Parser,</span> <span class="nd">Debug)]</span>
+ <span class="nd">#[command(author,</span> <span class="nd">version,</span> <span class="nd">about,</span> <span class="nd">long_about</span> <span class="nd">=</span> <span class="nd">None)]</span>
+ <span class="k">struct</span> <span class="n">Args</span> <span class="p">{</span>
+     <span class="c">/// Name of the person to greet</span>
+     <span class="nd">#[arg(short,</span> <span class="nd">long)]</span>
+     <span class="n">name</span><span class="p">:</span> <span class="nb">String</span><span class="p">,</span>
+
+     <span class="c">/// Number of times to greet</span>
+     <span class="nd">#[arg(short,</span> <span class="nd">long,</span> <span class="nd">default_value_t</span> <span class="nd">=</span> <span class="mi">1</span><span class="nd">)]</span>
+     <span class="n">count</span><span class="p">:</span> <span class="nb">u8</span><span class="p">,</span>
+ <span class="p">}</span>
+
+ <span class="k">fn</span> <span class="nf">main</span><span class="p">()</span> <span class="p">{</span>
+     <span class="k">let</span> <span class="n">args</span> <span class="o">=</span> <span class="nn">Args</span><span class="p">::</span><span class="nf">parse</span><span class="p">();</span>
+
+     <span class="k">for</span> <span class="mi">_</span> <span class="n">in</span> <span class="mi">0</span><span class="o">..</span><span class="n">args</span><span class="py">.count</span> <span class="p">{</span>
+         <span class="nd">println!</span><span class="p">(</span><span class="s">"Hello {}!"</span><span class="p">,</span> <span class="n">args</span><span class="py">.name</span><span class="p">)</span>
+     <span class="p">}</span>
+ <span class="p">}</span>
+</code></pre></div>    </div>
+  </li>
+  <li>
+    <p>Build the CLI to make sure it works.</p>
+
+    <div class="language-sh highlighter-rouge"><div class="highlight"><pre class="highlight"><code> cargo build
+ ./target/debug/trycmd-example <span class="nt">--help</span>
+</code></pre></div>    </div>
+
+    <p>Get the output:</p>
+
+    <div class="language-console highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="go"> Simple program to greet a person
+
+</span><span class="gp"> Usage: trycmd-example [OPTIONS] --name &lt;NAME&gt;</span><span class="w">
+</span><span class="go">
+ Options:
+</span><span class="gp"> -n, --name &lt;NAME&gt;</span><span class="w">    </span>Name of the person to greet
+<span class="gp"> -c, --count &lt;COUNT&gt;</span><span class="w">  </span>Number of <span class="nb">times </span>to greet <span class="o">[</span>default: 1]
+<span class="go"> -h, --help           Print help
+ -V, --version        Print version
+</span></code></pre></div>    </div>
+
+    <p>Now we have a simple CLI. Let’s add some test cases.</p>
+  </li>
+</ol>
+
+<h3 id="add-a-toml-test-case">Add a TOML test case</h3>
+
+<ol>
+  <li>
+    <p>Create a <code class="language-plaintext highlighter-rouge">tests/cmd</code> directory.</p>
+
+    <div class="language-sh highlighter-rouge"><div class="highlight"><pre class="highlight"><code> <span class="nb">mkdir</span> <span class="nt">-p</span> tests/cmd
+</code></pre></div>    </div>
+
+    <div class="language-console highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="go"> tree . --gitignore
+</span><span class="c"> .
+</span><span class="go"> ├── Cargo.lock
+ ├── Cargo.toml
+ ├── src
+ │   └── main.rs
+ └── tests
+     └── cmd
+</span></code></pre></div>    </div>
+  </li>
+  <li>
+    <p><a href="https://github.com/Rustin170506/trycmd-example/commit/3af3e458b2f6e2316843a43aae6e28aff9c671bf">Create a <code class="language-plaintext highlighter-rouge">tests/cmd/help.toml</code> file.</a></p>
+
+    <div class="language-sh highlighter-rouge"><div class="highlight"><pre class="highlight"><code> <span class="nb">touch </span>tests/cmd/help.toml
+</code></pre></div>    </div>
+
+    <div class="language-toml highlighter-rouge"><div class="highlight"><pre class="highlight"><code> <span class="c"># tests/cmd/help.toml</span>
+ <span class="py">bin.name</span> <span class="p">=</span> <span class="s">"trycmd-example"</span>
+ <span class="py">args</span> <span class="p">=</span> <span class="nn">["--help"]</span>
+ <span class="py">status.code</span> <span class="p">=</span> <span class="mi">0</span>
+ <span class="py">stdout</span> <span class="p">=</span> <span class="s">""</span>
+ <span class="py">stderr</span> <span class="p">=</span> <span class="s">""</span>
+</code></pre></div>    </div>
+  </li>
+  <li>
+    <p><a href="https://github.com/Rustin170506/trycmd-example/commit/9c17c3d3ce756a00969cd0f72d92372dda930593">Add <code class="language-plaintext highlighter-rouge">trycmd</code> as a dev dependency.</a></p>
+
+    <div class="language-sh highlighter-rouge"><div class="highlight"><pre class="highlight"><code> cargo add trycmd <span class="nt">--dev</span>
+</code></pre></div>    </div>
+
+    <p>Check the <code class="language-plaintext highlighter-rouge">Cargo.toml</code> file. You should see the <code class="language-plaintext highlighter-rouge">trycmd</code> dependency.</p>
+
+    <div class="language-toml highlighter-rouge"><div class="highlight"><pre class="highlight"><code> <span class="c"># Cargo.toml</span>
+ <span class="nn">[package]</span>
+ <span class="py">name</span> <span class="p">=</span> <span class="s">"trycmd-example"</span>
+ <span class="py">version</span> <span class="p">=</span> <span class="s">"0.1.0"</span>
+ <span class="py">edition</span> <span class="p">=</span> <span class="s">"2021"</span>
+
+ <span class="c"># See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html</span>
+
+ <span class="nn">[dependencies]</span>
+ <span class="nn">clap</span> <span class="o">=</span> <span class="p">{</span> <span class="py">version</span> <span class="p">=</span> <span class="s">"4.3.10"</span><span class="p">,</span> <span class="py">features</span> <span class="p">=</span> <span class="nn">["derive"]</span> <span class="p">}</span>
+
+ <span class="nn">[dev-dependencies]</span> <span class="c"># &lt;-- Add this section</span>
+ <span class="py">trycmd</span> <span class="p">=</span> <span class="s">"0.14.16"</span> <span class="c"># &lt;-- Add this line</span>
+</code></pre></div>    </div>
+  </li>
+  <li>
+    <p><a href="https://github.com/Rustin170506/trycmd-example/commit/570561be3c96d6ce2e673836719a31e2bd51346d">Add a Rust test case.</a></p>
+
+    <div class="language-sh highlighter-rouge"><div class="highlight"><pre class="highlight"><code> <span class="nb">touch </span>tests/cmd.rs
+</code></pre></div>    </div>
+
+    <div class="language-rust highlighter-rouge"><div class="highlight"><pre class="highlight"><code> <span class="c">// tests/cmd.rs</span>
+ <span class="nd">#[test]</span>
+ <span class="k">fn</span> <span class="nf">test_cmd</span><span class="p">()</span> <span class="p">{</span>
+     <span class="k">let</span> <span class="n">t</span> <span class="o">=</span> <span class="nn">trycmd</span><span class="p">::</span><span class="nn">TestCases</span><span class="p">::</span><span class="nf">new</span><span class="p">();</span>
+     <span class="k">let</span> <span class="n">trycmd_example_binary</span> <span class="o">=</span> <span class="nn">trycmd</span><span class="p">::</span><span class="nn">cargo</span><span class="p">::</span><span class="nf">cargo_bin</span><span class="p">(</span><span class="s">"trycmd-example"</span><span class="p">);</span>
+     <span class="n">t</span><span class="nf">.register_bin</span><span class="p">(</span><span class="s">"trycmd-example"</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">trycmd_example_binary</span><span class="p">);</span>
+     <span class="n">t</span><span class="nf">.case</span><span class="p">(</span><span class="s">"tests/cmd/*.toml"</span><span class="p">);</span>
+ <span class="p">}</span>
+</code></pre></div>    </div>
+
+    <p>For this test case, we start by creating a new test case using <code class="language-plaintext highlighter-rouge">trycmd::TestCases::new()</code>. Next, we obtain the path of the trycmd-example binary by utilizing <code class="language-plaintext highlighter-rouge">trycmd::cargo::cargo_bin("trycmd-example")</code>. Lastly, we run all the test cases in the <code class="language-plaintext highlighter-rouge">tests/cmd</code> directory by invoking <code class="language-plaintext highlighter-rouge">t.case("tests/cmd/*.toml")</code>.</p>
+  </li>
+  <li>
+    <p>Run the test case.</p>
+
+    <div class="language-sh highlighter-rouge"><div class="highlight"><pre class="highlight"><code> cargo <span class="nb">test</span>
+</code></pre></div>    </div>
+
+    <p>The test case will fail because we don’t have right output in the <code class="language-plaintext highlighter-rouge">tests/cmd/help.toml</code> file.</p>
+
+    <div class="language-console highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="go"> running 1 test
+ Testing tests/cmd/help.toml ... failed
+ Exit: success
+
+ ---- expected: stdout
+ ++++ actual:   stdout
+         1 + Simple program to greet a person
+         2 +
+</span><span class="gp">         3 + Usage: trycmd-example [OPTIONS] --name &lt;NAME&gt;</span><span class="w">
+</span><span class="go">         4 +
+         5 + Options:
+</span><span class="gp">         6 +   -n, --name &lt;NAME&gt;</span><span class="w">    </span>Name of the person to greet
+<span class="gp">         7 +   -c, --count &lt;COUNT&gt;</span><span class="w">  </span>Number of <span class="nb">times </span>to greet <span class="o">[</span>default: 1]
+<span class="go">         8 +   -h, --help           Print help
+         9 +   -V, --version        Print version
+ stderr:
+
+ Update snapshots with `TRYCMD=overwrite`
+ Debug output with `TRYCMD=dump`
+ test test_cmd ... FAILED
+</span></code></pre></div>    </div>
+  </li>
+</ol>
+
+<h3 id="overwrite-the-output"><a href="https://github.com/Rustin170506/trycmd-example/commit/6c8123d456c4c6333e1986db2fc7bf80d62f5cc9">Overwrite the output</a></h3>
+
+<p>AS you can see from the output, we can use <code class="language-plaintext highlighter-rouge">TRYCMD=overwrite</code> to overwrite the output in the <code class="language-plaintext highlighter-rouge">tests/cmd/help.toml</code> file.</p>
+
+<div class="language-sh highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">TRYCMD</span><span class="o">=</span>overwrite cargo <span class="nb">test</span>
+</code></pre></div></div>
+
+<blockquote>
+  <p>Note: If you are using Windows, your test output will be different from the output above. This is because on Windows the executable file extension is <code class="language-plaintext highlighter-rouge">.exe</code>. So the output would be <code class="language-plaintext highlighter-rouge">trycmd-example.exe</code> instead of <code class="language-plaintext highlighter-rouge">trycmd-example</code>. So you can set it to<code class="language-plaintext highlighter-rouge">trycmd-example[EXE]</code> in <code class="language-plaintext highlighter-rouge">tests/cmd/help.toml</code> to make it work on all platforms.</p>
+</blockquote>
+
+<h3 id="add-a-markdown-test-case">Add a Markdown test case</h3>
+
+<p>Usually, we use this feature to test the <code class="language-plaintext highlighter-rouge">README.md</code> or other example files.</p>
+
+<ol>
+  <li>
+    <p><a href="https://github.com/Rustin170506/trycmd-example/commit/c8375173cbad8987f33f6c12ad9f0bb6fb4a85a8">Create a README.md file.</a></p>
+
+    <div class="language-sh highlighter-rouge"><div class="highlight"><pre class="highlight"><code> <span class="nb">touch </span>README.md
+</code></pre></div>    </div>
+
+    <div class="language-markdown highlighter-rouge"><div class="highlight"><pre class="highlight"><code> # trycmd-example
+
+ <span class="p">```</span><span class="nl">console
+</span><span class="gp"> $</span><span class="w"> </span>trycmd-example <span class="nt">--help</span>
+ <span class="p">```</span>
+</code></pre></div>    </div>
+  </li>
+  <li>
+    <p><a href="https://github.com/Rustin170506/trycmd-example/commit/c7489852927e52efa6e4b7a805628d13e7bf1c55">Add README.md as a test case.</a></p>
+
+    <div class="language-rust highlighter-rouge"><div class="highlight"><pre class="highlight"><code> <span class="c">// tests/cmd.rs</span>
+ <span class="nd">#[test]</span>
+ <span class="k">fn</span> <span class="nf">test_cmd</span><span class="p">()</span> <span class="p">{</span>
+     <span class="k">let</span> <span class="n">t</span> <span class="o">=</span> <span class="nn">trycmd</span><span class="p">::</span><span class="nn">TestCases</span><span class="p">::</span><span class="nf">new</span><span class="p">();</span>
+     <span class="k">let</span> <span class="n">trycmd_example_binary</span> <span class="o">=</span> <span class="nn">trycmd</span><span class="p">::</span><span class="nn">cargo</span><span class="p">::</span><span class="nf">cargo_bin</span><span class="p">(</span><span class="s">"trycmd-example"</span><span class="p">);</span>
+     <span class="n">t</span><span class="nf">.register_bin</span><span class="p">(</span><span class="s">"trycmd-example"</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">trycmd_example_binary</span><span class="p">);</span>
+     <span class="n">t</span><span class="nf">.case</span><span class="p">(</span><span class="s">"tests/cmd/*.toml"</span><span class="p">);</span>
+     <span class="n">t</span><span class="nf">.case</span><span class="p">(</span><span class="s">"README.md"</span><span class="p">);</span> <span class="c">// &lt;-- Add this line</span>
+ <span class="p">}</span>
+</code></pre></div>    </div>
+  </li>
+  <li>
+    <p>Run the test case.</p>
+
+    <div class="language-sh highlighter-rouge"><div class="highlight"><pre class="highlight"><code> cargo <span class="nb">test</span>
+</code></pre></div>    </div>
+
+    <p>The test case will fail because we don’t have right output in the <code class="language-plaintext highlighter-rouge">README.md</code> file.</p>
+
+    <div class="language-console highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="go"> running 1 test
+ Testing tests/cmd/help.toml ... ok
+ Testing README.md:4 ... failed
+ Exit: success
+
+ ---- expected: stdout
+ ++++ actual:   stdout
+         1 + Simple program to greet a person
+         2 +
+</span><span class="gp">         3 + Usage: trycmd-example [OPTIONS] --name &lt;NAME&gt;</span><span class="w">
+</span><span class="go">         4 +
+         5 + Options:
+</span><span class="gp">         6 +   -n, --name &lt;NAME&gt;</span><span class="w">    </span>Name of the person to greet
+<span class="gp">         7 +   -c, --count &lt;COUNT&gt;</span><span class="w">  </span>Number of <span class="nb">times </span>to greet <span class="o">[</span>default: 1]
+<span class="go">         8 +   -h, --help           Print help
+         9 +   -V, --version        Print version
+ stderr:
+
+ Update snapshots with `TRYCMD=overwrite`
+ Debug output with `TRYCMD=dump`
+ test test_cmd ... FAILED
+</span></code></pre></div>    </div>
+  </li>
+  <li>
+    <p><a href="https://github.com/Rustin170506/trycmd-example/commit/80c3c9bad811bd11933935421c8f80b65ba74c17">Overwrite the output.</a></p>
+
+    <div class="language-sh highlighter-rouge"><div class="highlight"><pre class="highlight"><code> <span class="nv">TRYCMD</span><span class="o">=</span>overwrite cargo <span class="nb">test</span>
+</code></pre></div>    </div>
+
+    <p><code class="language-plaintext highlighter-rouge">trycmd</code> will overwrite the output in the <code class="language-plaintext highlighter-rouge">README.md</code> file.</p>
+  </li>
+</ol>
+
+<h3 id="use-directory-to-store-input-and-output-files">Use directory to store input and output files</h3>
+
+<p>To organize input and output files effectively, we can utilize a dedicated directory specifically designed for storing these files.</p>
+
+<p>Right now, we print the output to the console. If we want to print the output to a file, we also can test it with <code class="language-plaintext highlighter-rouge">trycmd</code>.</p>
+
+<ol>
+  <li>
+    <p><a href="https://github.com/Rustin170506/trycmd-example/commit/900cddd1ebedc3932f2bf6d7c3e98b60182b5976">Change the <code class="language-plaintext highlighter-rouge">main.rs</code> file.</a></p>
+
+    <div class="language-rust highlighter-rouge"><div class="highlight"><pre class="highlight"><code> <span class="c">// src/main.rs</span>
+ <span class="k">use</span> <span class="nn">std</span><span class="p">::</span><span class="nn">io</span><span class="p">::</span><span class="n">Write</span><span class="p">;</span> <span class="c">// &lt;-- Add this line</span>
+
+ <span class="k">use</span> <span class="nn">clap</span><span class="p">::</span><span class="n">Parser</span><span class="p">;</span>
+
+ <span class="c">/// Simple program to greet a person</span>
+ <span class="nd">#[derive(Parser,</span> <span class="nd">Debug)]</span>
+ <span class="nd">#[command(author,</span> <span class="nd">version,</span> <span class="nd">about,</span> <span class="nd">long_about</span> <span class="nd">=</span> <span class="nd">None)]</span>
+ <span class="k">struct</span> <span class="n">Args</span> <span class="p">{</span>
+     <span class="c">/// Name of the person to greet</span>
+     <span class="nd">#[arg(short,</span> <span class="nd">long)]</span>
+     <span class="n">name</span><span class="p">:</span> <span class="nb">String</span><span class="p">,</span>
+
+     <span class="c">/// Number of times to greet</span>
+     <span class="nd">#[arg(short,</span> <span class="nd">long,</span> <span class="nd">default_value_t</span> <span class="nd">=</span> <span class="mi">1</span><span class="nd">)]</span>
+     <span class="n">count</span><span class="p">:</span> <span class="nb">u8</span><span class="p">,</span>
+ <span class="p">}</span>
+
+ <span class="k">fn</span> <span class="nf">main</span><span class="p">()</span> <span class="p">{</span>
+     <span class="k">let</span> <span class="n">args</span> <span class="o">=</span> <span class="nn">Args</span><span class="p">::</span><span class="nf">parse</span><span class="p">();</span>
+
+     <span class="c">// Print the greeting to a file. &lt;-- Add this line</span>
+     <span class="k">let</span> <span class="k">mut</span> <span class="n">file</span> <span class="o">=</span> <span class="nn">std</span><span class="p">::</span><span class="nn">fs</span><span class="p">::</span><span class="nn">File</span><span class="p">::</span><span class="nf">create</span><span class="p">(</span><span class="s">"greeting.txt"</span><span class="p">)</span><span class="nf">.unwrap</span><span class="p">();</span> <span class="c">// &lt;-- Add this line</span>
+     <span class="k">for</span> <span class="mi">_</span> <span class="n">in</span> <span class="mi">0</span><span class="o">..</span><span class="n">args</span><span class="py">.count</span> <span class="p">{</span> <span class="c">// &lt;-- Add this line</span>
+         <span class="nd">writeln!</span><span class="p">(</span><span class="n">file</span><span class="p">,</span> <span class="s">"Hello, {}!"</span><span class="p">,</span> <span class="n">args</span><span class="py">.name</span><span class="p">)</span><span class="nf">.unwrap</span><span class="p">();</span> <span class="c">// &lt;-- Add this line</span>
+     <span class="p">}</span> <span class="c">// &lt;-- Add this line</span>
+ <span class="p">}</span>
+</code></pre></div>    </div>
+  </li>
+  <li>
+    <p><a href="https://github.com/Rustin170506/trycmd-example/commit/d52071fe1d93c00c84a42a5fae68776d726c30a7">Add a new TOML test case.</a></p>
+
+    <div class="language-sh highlighter-rouge"><div class="highlight"><pre class="highlight"><code> <span class="nb">touch </span>tests/cmd/greeting.toml
+</code></pre></div>    </div>
+
+    <div class="language-toml highlighter-rouge"><div class="highlight"><pre class="highlight"><code> <span class="c"># tests/cmd/greeting.toml</span>
+ <span class="py">bin.name</span> <span class="p">=</span> <span class="s">"trycmd-example"</span>
+ <span class="py">args</span> <span class="p">=</span> <span class="p">[</span><span class="s">"--name"</span><span class="p">,</span> <span class="s">"foo"</span><span class="p">]</span>
+ <span class="py">status.code</span> <span class="p">=</span> <span class="mi">0</span>
+ <span class="py">stdout</span> <span class="p">=</span> <span class="s">""</span>
+ <span class="py">stderr</span> <span class="p">=</span> <span class="s">""</span>
+</code></pre></div>    </div>
+  </li>
+  <li>
+    <p><a href="https://github.com/Rustin170506/trycmd-example/commit/92ca6c26f1f10a48a0df5ca5dbb6c9b477540bec">Add an output directory and an output file.</a></p>
+
+    <div class="language-sh highlighter-rouge"><div class="highlight"><pre class="highlight"><code> <span class="nb">mkdir </span>tests/cmd/greeting.out
+ <span class="nb">touch </span>tests/cmd/greeting.out/greeting.txt
+</code></pre></div>    </div>
+  </li>
+  <li>
+    <p>Run the test case.</p>
+
+    <div class="language-sh highlighter-rouge"><div class="highlight"><pre class="highlight"><code> cargo <span class="nb">test</span>
+</code></pre></div>    </div>
+
+    <p>The test case will fail because we don’t have right output in the <code class="language-plaintext highlighter-rouge">tests/cmd/greeting.out/greeting.txt</code> file.</p>
+
+    <div class="language-console highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="go"> running 1 test
+ Testing README.md:4 ... ok
+ Testing tests/cmd/help.toml ... ok
+ Testing tests/cmd/greeting.toml ... ok
+ Testing tests/cmd/greeting.toml:teardown ... failed
+ Failed: Files left in unexpected state
+
+ tests/cmd/greeting.out: is good
+
+ ---- expected: tests/cmd/greeting.out/greeting.txt
+ ++++ actual:   /private/var/folders/76/zkdsk83x0dl3qydmhxf9dj3h0000gn/T/.tmpW1Aqys/greeting.txt
+         1 + Hello, foo!
+ Update snapshots with `TRYCMD=overwrite`
+ Debug output with `TRYCMD=dump`
+ test test_cmd ... FAILED
+</span></code></pre></div>    </div>
+  </li>
+  <li>
+    <p><a href="https://github.com/Rustin170506/trycmd-example/commit/ecc694e73d0946bda0d5e65925dc6912ab3dee69">Overwrite the output.</a></p>
+
+    <div class="language-sh highlighter-rouge"><div class="highlight"><pre class="highlight"><code> <span class="nv">TRYCMD</span><span class="o">=</span>overwrite cargo <span class="nb">test</span>
+</code></pre></div>    </div>
+
+    <p><code class="language-plaintext highlighter-rouge">trycmd</code> will overwrite the output in the <code class="language-plaintext highlighter-rouge">tests/cmd/greeting.out/greeting.txt</code> file.</p>
+  </li>
+</ol>
+
+<h2 id="summary">Summary</h2>
+
+<p>In this tutorial, we learned how to use <code class="language-plaintext highlighter-rouge">trycmd</code> to test a CLI program. We also learned how to use <code class="language-plaintext highlighter-rouge">TRYCMD=overwrite</code> to overwrite the output in the test case files. This feature is very useful when we want to update the output in the test case files. Hope you enjoy this tutorial and use <code class="language-plaintext highlighter-rouge">trycmd</code> to test your CLI programs.</p>
+
+<p>You can find the source code of this tutorial in <a href="https://github.com/Rustin170506/trycmd-example">this repository</a>.</p>
+
+<h2 id="reference">Reference</h2>
+
+<ul>
+  <li><a href="https://github.com/assert-rs/trycmd">trycmd</a></li>
+  <li><a href="https://github.com/clap-rs/clap">clap</a></li>
+  <li><a href="https://github.com/rust-lang/rustup">rustup</a></li>
+</ul>
+
+
+    <p class="signature">&mdash; Rustin</p>
+  </div>
+  <script>
+    (function () {
+      anchors.options.placement = 'right';
+      anchors.add('.content > h3, .content > h4, .content > h5, .content > h6');
+    })();
+  </script>
+  <script src="https://giscus.app/client.js" data-repo="Rustin170506/blog"
+    data-repo-id="MDEwOlJlcG9zaXRvcnkyMTU4MDI0NDg=" data-category="Ideas" data-category-id="DIC_kwDODNziUM4CY_bg"
+    data-mapping="title" data-strict="0" data-reactions-enabled="1" data-emit-metadata="0" data-input-position="top"
+    data-theme="light" data-lang="en" data-loading="lazy" crossorigin="anonymous" async>
+    </script>
+</body>
+
+</html>
