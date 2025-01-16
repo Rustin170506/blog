@@ -71,6 +71,11 @@ name = "YouTube"
 title = "YouTube"
 url = "https://www.youtube.com/@rustin1024"
 
+[[params.socialIcons]]
+name = "LinkedIn"
+title = "LinkedIn"
+url = "https://www.linkedin.com/in/rustin-liu/"
+
 
 [markup.goldmark.renderer]
 unsafe = true
