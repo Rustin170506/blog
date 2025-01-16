@@ -24,6 +24,7 @@ ShowRssButtonInSectionTermList = true
 ShowShareButtons = true
 ShowToc = true
 author = "Rustin liu"
+comments = true
 defaultTheme = "auto"
 description = "Rustin's personal blog"
 displayFullLangName = true
