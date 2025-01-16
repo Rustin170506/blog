@@ -34,11 +34,16 @@ env = "production"
 [params.profileMode]
 enabled = true
 imageHeight = 120
-imageTitle = "<title of image as alt>"
+imageTitle = "Rustin"
 imageUrl = "https://avatars.githubusercontent.com/u/29879298?v=4"
 imageWidth = 120
 subtitle = "👋 My name is Rustin Liu and I’m a passionate software engineer who specializes in distributed systems and dev tools."
 title = "Rustin"
+
+[params.editPost]
+Text = "Suggest Changes"
+URL = "https://github.com/Rustin170506/blog/tree/master/content"
+appendFilePath = true
 
 
 [outputs]
