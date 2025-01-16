@@ -12,6 +12,7 @@ pygmentsUseClasses = true
 theme = 'PaperMod'
 title = 'Rustin'
 
+
 [params]
 ShowAllPagesInArchive = true
 ShowBreadCrumbs = true
@@ -28,6 +29,17 @@ description = "Rustin's personal blog"
 displayFullLangName = true
 env = "production"
 
+
+[params.profileMode]
+enabled = true
+imageHeight = 120
+imageTitle = "<title of image as alt>"
+imageUrl = "https://avatars.githubusercontent.com/u/29879298?v=4"
+imageWidth = 120
+subtitle = "👋 My name is Rustin Liu and I’m a passionate software engineer who specializes in distributed systems and dev tools."
+title = "Rustin"
+
+
 [outputs]
 home = ["HTML", "RSS", "JSON"]
 
@@ -36,30 +48,30 @@ languageName = "English"
 weight = 1
 
 [[languages.en.menu.main]]
-name = "About"
-url = "about"
-weight = 10
+name = "Blog"
+url = "posts/"
+weight = 1
 
 [[languages.en.menu.main]]
 name = "Presentations"
 url = "presentations/"
-weight = 10
+weight = 2
+
+[[languages.en.menu.main]]
+name = "About"
+url = "about"
+weight = 3
 
 [[languages.en.menu.main]]
 name = "Search"
 url = "search/"
-weight = 10
+weight = 4
 
 [[languages.en.menu.main]]
 name = "Tags"
 url = "tags/"
-weight = 10
+weight = 5
 
-[params.homeInfoParams]
-Content = """
-👋 My name is Rustin Liu and I’m a passionate software engineer who specializes in distributed systems and dev tools.
-"""
-Title = "Rustin Liu"
 
 [[params.socialIcons]]
 name = "github"
@@ -76,6 +88,10 @@ name = "LinkedIn"
 title = "LinkedIn"
 url = "https://www.linkedin.com/in/rustin-liu/"
 
+[[params.socialIcons]]
+name = "Email"
+title = "Email"
+url = "mailto:rustin.liu@gmail.com"
 
 [markup.goldmark.renderer]
 unsafe = true
