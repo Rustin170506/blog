@@ -1,14 +1,9 @@
 ---
 title: 'TiDB High Performance 课程实验 1'
-layout: post
-
-categories: post
-tags:
-- go
-- rust
-- pingcap
-- tidb
-- tikv
+date: 2020-09-03
+description: 'TiDB High Performance 课程实验 1'
+tags: ["TiDB", "PingCAP", "TiKV"]
+categories: ["Distributed System"]
 ---
 
 大家好，我是 [Rustin](https://github.com/Rustin170506). 最近开始做贵司推出的 TiDB High Performance 课程，所以开个课程实验记录的坑！

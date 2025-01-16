@@ -1,12 +1,9 @@
 ---
 title: '使用 TiCDC 将 TiDB 数据接入 Flink'
-layout: post
-
-categories: post
-tags:
-- TiCDC
-- TiDB
-- TiKV
+date: 2022-01-30
+description: '使用 TiCDC 将 TiDB 数据接入 Flink'
+tags: ["TiCDC", "TiDB", "Flink", "TiCDC", "Kafka"]
+categories: ["TiCDC"]
 ---
 
 > 免责声明：我既不懂 TiCDC，也不懂 Flink。所以下面的文章很有可能是一派胡言。

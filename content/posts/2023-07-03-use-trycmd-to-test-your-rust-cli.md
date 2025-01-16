@@ -1,14 +1,9 @@
 ---
 title: 'How to use trycmd to test your Rust CLI?'
-layout: post
-
-categories: post
-tags:
-- Rust
-- trycmd
-- testing
-- CLI
-- Rustup
+date: 2023-07-03
+description: 'How to use trycmd to test your Rust CLI?'
+tags: ["Rust", "trycmd", "testing", "CLI", "Rustup"]
+categories: ["Rust"]
 ---
 
 Recently we released [Rustup 1.26.0], which includes a bunch of new features and bug fixes. We also upgraded the [clap] version to 3.2.25, which is a major version upgrade. This upgrade was a bit tricky, because clap 3.0.0 had a lot of breaking changes. We needed to make sure that the new version of Rustup worked as expected. So before we upgraded clap we added [UI tests] for Rustup. We use [trycmd] to test the CLI of Rustup. In this post I will show you how to use `trycmd` to test your CLI.

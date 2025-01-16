@@ -1,15 +1,9 @@
 ---
 title: '开源社区分析报告背后的数据支撑: GH Archive'
-layout: post
-
-categories: post
-tags:
-- X-lab
-- GitHub
-- pingcap
-- tidb
-- tikv
-- GH Archive
+date: 2021-03-07
+description: '介绍 GH Archive 数据集的收集方式和使用方法'
+tags: ["X-lab", "GitHub", "TiDB", "PingCAP", "TiKV", "GH Archive"]
+categories: ["GitHub"]
 ---
 
 最近应老板要求看了一个 X-lab 针对 GitHub 开源项目的[分析报告](http://www.x-lab.info/github-analysis-report/#/report)，发现了一个背后非常好用并且强大的[数据集](https://www.gharchive.org/)。所以简单介绍一下这个数据集的收集方式和使用方法。

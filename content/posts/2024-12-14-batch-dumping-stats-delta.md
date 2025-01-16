@@ -1,13 +1,9 @@
 ---
 title: 'Batch Dumping Statistics Delta'
-layout: post
-
-categories: post
-tags:
-- Golang
-- TiDB
-- SQL
-- Statistics
+date: 2024-12-14
+description: 'Optimizing statistics collection in TiDB by introducing a new batch processing approach'
+tags: ["Golang", "TiDB", "SQL", "Statistics"]
+categories: ["Distributed System", "Database", "TiDB"]
 ---
 
 # Background

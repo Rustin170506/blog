@@ -1,12 +1,9 @@
 ---
 title: '如何快速的成为 Ant Design 的 contributor'
-layout: post
-
-categories: post
-tags:
-- react
-- antd
-- ui
+date: 2020-04-02
+description: '如何快速的成为 Ant Design 的 contributor'
+tags: ["Ant Design", "React", "UI"]
+categories: ["UI"]
 ---
 
 大家好，我是 Rustin。今天想跟大家介绍下如何快速的成为 antd 的贡献者，希望能够对想要加入 antd 社区贡献的同学有帮助！

@@ -1,11 +1,9 @@
 ---
 title: '解决 macOS 10.15 Catalina 无法运行 qmeu 的问题'
-layout: post
-
-categories: post
-tags:
-- macOS
-- qemu
+date: 2019-11-03
+description: '解决 macOS 10.15 Catalina 无法运行 qmeu 的问题'
+tags: ["macOS", "qemu", "Catalina"]
+categories: ["macOS"]
 ---
 
 最近在学习 Rust，并且在尝试使用 Rust 来做内核，跟着 [Writing an OS in Rust](https://os.phil-opp.com/){:target="_blank"} 系列博客学习，这个博客质量非常高，深入浅出。

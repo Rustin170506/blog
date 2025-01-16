@@ -1,12 +1,9 @@
 ---
 title: 'Feedback on `cargo-info` to prepare it for merging'
-layout: post
-
-categories: post
-tags:
-- Rust
-- Cargo
-- CLI
+date: 2024-02-01
+description: 'Feedback on the `cargo-info` subcommand to prepare it for merging'
+tags: ["Rust", "Cargo", "CLI"]
+categories: ["Rust"]
 ---
 
 # Reminder

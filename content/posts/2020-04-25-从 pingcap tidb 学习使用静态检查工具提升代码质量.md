@@ -1,12 +1,9 @@
 ---
 title: '从 pingcap tidb 学习使用静态检查工具提升代码质量'
-layout: post
-
-categories: post
-tags:
-- go
-- pingcap
-- tidb
+date: 2020-04-25
+description: '如何使用一些 golang 的静态代码检查工具来提升代码质量'
+tags: ["go", "pingcap", "tidb"]
+categories: ["Go"]
 ---
 
 大家好，我是 [Rustin](https://github.com/Rustin170506) 。今天想跟大家简单介绍一下如何使用一些 golang 的静态代码检查工具来提升代码质量！

@@ -1,13 +1,9 @@
 ---
 title: 'Simplifying TiDB Statistics Collection: Unifying Concurrency Controls'
-layout: post
-
-categories: post
-tags:
-- Golang
-- TiDB
-- SQL
-- Statistics
+date: 2024-11-18
+description: 'Exploring the impact of tidb_build_stats_concurrency and tidb_analyze_partition_concurrency on statistics collection in TiDB'
+tags: ["TiDB", "SQL", "Statistics"]
+categories: ["TiDB"]
 ---
 
 # Background
@@ -35,7 +31,7 @@ To evaluate the performance impact of these parameters, I benchmarked an `analyz
 > **Note:** Test environment: 3 TiKV nodes and 3 TiDB nodes, each with 16 cores and 32GB RAM.
 
 | `tidb_build_stats_concurrency` | `tidb_analyze_partition_concurrency` | `analyze table` Time |
-|--------------------------------|--------------------------------------|----------------------|
+| ------------------------------ | ------------------------------------ | -------------------- |
 | 2                              | 2                                    | 6 min 8.61 sec       |
 | 15                             | 2                                    | 2 min 55.71 sec      |
 | 2                              | 15                                   | 6 min 4.41 sec       |
@@ -106,7 +102,7 @@ LIMIT 3;
 Let's analyze the overall timeline from when statistics collection begins to when the data is persisted to storage. This will give us insight into both the collection and persistence phases of the operation.
 
 | `tidb_build_stats_concurrency` | `tidb_analyze_partition_concurrency` | partition | Start Time          | End Time            |
-|--------------------------------|--------------------------------------|-----------|---------------------|---------------------|
+| ------------------------------ | ------------------------------------ | --------- | ------------------- | ------------------- |
 | 2                              | 2                                    | p18       | 2024-11-22 11:31:27 | 2024-11-22 11:31:36 |
 | 15                             | 2                                    | p18       | 2024-11-22 12:37:35 | 2024-11-22 12:38:14 |
 
@@ -123,7 +119,7 @@ WHERE start_time BETWEEN '2024-11-22 11:31:00' AND '2024-11-22 11:31:59';
 ```
 
 | `tidb_build_stats_concurrency` | `tidb_analyze_partition_concurrency` | record_count |
-|--------------------------------|--------------------------------------|--------------|
+| ------------------------------ | ------------------------------------ | ------------ |
 | 2                              | 2                                    | 20           |
 | 15                             | 2                                    | 29           |
 
@@ -139,7 +135,7 @@ I also tested the `analyze table` command on a partitioned table containing 100 
 > **Note:** Test environment: 3 TiKV nodes and 3 TiDB nodes, each with 16 cores and 32GB RAM. Same as the previous test.
 
 | `tidb_build_stats_concurrency` | `tidb_analyze_partition_concurrency` | `analyze table` Time |
-|--------------------------------|--------------------------------------|----------------------|
+| ------------------------------ | ------------------------------------ | -------------------- |
 | 2                              | 2                                    | 25 min 39.67 sec     |
 | 15                             | 2                                    | 10 min 58.74 sec     |
 | 2                              | 15                                   | 24 min 15.95 sec     |
@@ -154,7 +150,7 @@ While our initial findings suggest that `tidb_build_stats_concurrency` is the do
 I tested the `analyze table` command on a wide table containing 500 partitions and 200 columns and 3 million rows. Here are the results:
 
 | `tidb_build_stats_concurrency` | `tidb_analyze_partition_concurrency` | `analyze table` Time    |
-|--------------------------------|--------------------------------------|-------------------------|
+| ------------------------------ | ------------------------------------ | ----------------------- |
 | 2                              | 2                                    | 1 hour 17 min 57.55 sec |
 | 15                             | 2                                    | 1 hour 15 min 30.46 sec |
 | 2                              | 15                                   | 34 min 31.38 sec        |

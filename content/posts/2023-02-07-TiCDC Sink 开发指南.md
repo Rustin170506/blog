@@ -1,13 +1,9 @@
 ---
 title: 'TiCDC Sink 开发指南'
-layout: post
-
-categories: post
-tags:
-- Golang
-- Go
-- TiCDC
-- TiDB
+date: 2023-02-07
+description: 'TiCDC Sink 模块开发指南'
+tags: ["TiCDC", "Sink", "Golang"]
+categories: ["TiCDC"]
 ---
 
 我近半年的时间都在做 [TiCDC] [Sink 模块]的改造工作，目前新的 Sink 实现已经成功替换了旧的实现。最近有客户希望通过自己实现 Sink 的方式来接入 TiCDC，所以我想把这段时间的改造和设计经验分享出来，希望能帮助到大家。

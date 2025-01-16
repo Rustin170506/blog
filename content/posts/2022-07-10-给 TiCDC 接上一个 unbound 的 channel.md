@@ -1,13 +1,9 @@
 ---
 title: '给 TiCDC 接上一个 unbound 的 channel'
-layout: post
-
-categories: post
-tags:
-- Golang
-- Go
-- Channel
-- TiCDC
+date: 2022-07-10
+description: '在 TiCDC Sink 组件中接入 chann'
+tags: ["Go", "TiCDC"]
+categories: ["Go"]
 ---
 
 最近在改造 [TiCDC] 的 [Sink] 组件时需要为 [MQ] 类型的 Sink 接上一个 unbound 的 [channel]。
