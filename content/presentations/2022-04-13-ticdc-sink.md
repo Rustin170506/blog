@@ -5,4 +5,4 @@ tags: ["TiCDC", "Sink", "Golang"]
 categories: ["TiCDC"]
 ---
 
-详见：[TiCDC Sink Component](https://ticdc-sink.slides.rustin.me/)
+<iframe src="https://ticdc-sink.slides.rustin.me/" width="100%" height="500px" frameborder="0" allowfullscreen></iframe>
