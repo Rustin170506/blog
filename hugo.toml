@@ -101,3 +101,6 @@ url = "mailto:rustin.liu@gmail.com"
 
 [markup.goldmark.renderer]
 unsafe = true
+
+[analytics.google]
+SiteVerificationTag = "G-6MJ0XT6MNX"
