@@ -12,7 +12,6 @@ I am also a big believer in open source. I contribute to the Rust community, whe
   - [cargo] - Cargo downloads your Rust package’s dependencies, compiles your packages, makes distributable packages.
   - [crates.io] - The Rust package registry.
 - Async Runtime
-  - [tokio] - An asynchronous runtime for the Rust programming language.
   - [console] - A debugger for async rust!
   - [tokio-console-web] - A web-based debugger for async rust!
 
@@ -27,7 +26,6 @@ Languages I speak:
 [TiDB]: https://github.com/pingcap/tidb
 [TiCDC]: https://github.com/pingcap/tiflow
 [cargo]: https://github.com/rust-lang/cargo
-[tokio]: https://github.com/tokio-rs/tokio
 [console]: https://github.com/tokio-rs/console
 [tokio-console-web]: https://github.com/Rustin170506/tokio-console-web
 [crates.io]: https://github.com/rust-lang/crates.io
