@@ -2,7 +2,7 @@ baseURL = 'https://0xpoe.dev/'
 buildDrafts = false
 buildExpired = false
 buildFuture = false
-copyright = '© 2025 Rustin'
+copyright = '© 2025 Poe'
 enableEmoji = true
 enableInlineShortcodes = true
 enableRobotsTXT = true
@@ -10,7 +10,7 @@ languageCode = 'en-us'
 mainSections = ['posts']
 pygmentsUseClasses = true
 theme = 'PaperMod'
-title = 'Rustin'
+title = 'Poe'
 
 
 [params]
@@ -23,10 +23,10 @@ ShowReadingTime = true
 ShowRssButtonInSectionTermList = true
 ShowShareButtons = false
 ShowToc = true
-author = "Rustin liu"
+author = "Poe liu"
 comments = true
 defaultTheme = "auto"
-description = "Rustin's personal blog"
+description = "Poe's personal blog"
 displayFullLangName = true
 env = "production"
 
@@ -34,11 +34,11 @@ env = "production"
 [params.profileMode]
 enabled = true
 imageHeight = 120
-imageTitle = "Rustin"
+imageTitle = "Poe"
 imageUrl = "https://avatars.githubusercontent.com/u/29879298?v=4"
 imageWidth = 120
-subtitle = "👋 My name is Rustin Liu and I’m a passionate software engineer who specializes in distributed systems and dev tools."
-title = "Rustin"
+subtitle = "👋 My name is Poe Liu and I’m a passionate software engineer who specializes in distributed systems and dev tools."
+title = "Poe"
 
 [params.editPost]
 Text = "Suggest Changes"
@@ -92,12 +92,12 @@ url = "https://www.youtube.com/@poe1024"
 [[params.socialIcons]]
 name = "LinkedIn"
 title = "LinkedIn"
-url = "https://www.linkedin.com/in/rustin-liu/"
+url = "https://www.linkedin.com/in/poe-liu/"
 
 [[params.socialIcons]]
 name = "Email"
 title = "Email"
-url = "mailto:rustin.liu@gmail.com"
+url = "mailto:poe.liu@pm.me"
 
 [markup.goldmark.renderer]
 unsafe = true

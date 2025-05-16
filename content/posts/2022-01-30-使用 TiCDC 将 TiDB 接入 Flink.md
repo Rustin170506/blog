@@ -124,7 +124,7 @@ Topic。 另外，我们也启动了 Flink 的 jobmanager 和 taskmanager。
 ➜  ticdc-test-compose git:(main) tiup cdc:nightly cli changefeed create --sink-uri="kafka://localhost:9092/ticdc-test?protocol=canal-json"
 The component `cdc` version v5.5.0-nightly-20220127 is not installed; downloading from repository.
 component cdc version v5.5.0-nightly-20220127 is already installed
-Starting component `cdc`: /Users/rustin/.tiup/components/cdc/v5.5.0-nightly-20220127/cdc cli changefeed create --sink-uri=kafka://localhost:9092/ticdc-test?protocol=canal-json
+Starting component `cdc`: /Users/poe/.tiup/components/cdc/v5.5.0-nightly-20220127/cdc cli changefeed create --sink-uri=kafka://localhost:9092/ticdc-test?protocol=canal-json
 [2022/01/30 14:35:11.368 +08:00] [WARN] [kafka.go:383] ["topic's `max.message.bytes` less than the user set `max-message-bytes`,use topic's `max.message.bytes` to initialize the Kafka producer"] [max.message.bytes=3145728] [max-message-bytes=10485760]
 [2022/01/30 14:35:11.368 +08:00] [WARN] [kafka.go:393] ["topic already exist, TiCDC will not create the topic"] [topic=ticdc-test] [detail="{\"NumPartitions\":1,\"ReplicationFactor\":1,\"ReplicaAssignment\":{\"0\":[1001]},\"ConfigEntries\":{\"max.message.bytes\":\"3145728\",\"segment.bytes\":\"1073741824\"}}"]
 Create changefeed successfully!

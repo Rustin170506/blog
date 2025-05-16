@@ -6,7 +6,7 @@ tags: ["TiDB", "PingCAP", "TiKV"]
 categories: ["Distributed System"]
 ---
 
-大家好，我是 [Rustin](https://github.com/0xPoe). 最近开始做贵司推出的 TiDB High Performance 课程，所以开个课程实验记录的坑！
+大家好，我是 [Poe](https://github.com/0xPoe). 最近开始做贵司推出的 TiDB High Performance 课程，所以开个课程实验记录的坑！
 
 此博客在 [GitHub](https://github.com/0xPoe/blog) 上公开发布. 如果您有任何问题或疑问，请在此处打开一个 [issue](https://github.com/0xPoe/blog/issues).
 
@@ -131,7 +131,7 @@ Flags:
 通过这三个参数，可以快速的利用 TiUP 使用自己编译的二进制文件启动本地集群。使用如下命令启动集群：
 
 ```sh
-➜  ~ tiup playground --db.binpath /Users/rustin/GolandProjects/tidb/bin/tidb-server --kv.binpath /Users/rustin/ClionProjects/tikv/target/debug/tikv-server --pd.binpath /Users/rustin/GolandProjects/pd/bin/pd-server
+➜  ~ tiup playground --db.binpath /Users/poe/GolandProjects/tidb/bin/tidb-server --kv.binpath /Users/poe/ClionProjects/tikv/target/debug/tikv-server --pd.binpath /Users/poe/GolandProjects/pd/bin/pd-server
 ```
 
 输出以下内容之后启动成功：
@@ -244,7 +244,7 @@ func (e *SimpleExec) executeBegin(ctx context.Context, s *ast.BeginStmt) error {
 
 ```sh
 ➜  tidb-0 pwd
-/Users/rustin/.tiup/data/SA3l5r6/tidb-0
+/Users/poe/.tiup/data/SA3l5r6/tidb-0
 ➜  tidb-0 less tidb.log
 # 搜索 hello 找到日志
 [2020/09/09 11:51:23.426 +08:00] [INFO] [simple.go:584] ["hello transaction"]
