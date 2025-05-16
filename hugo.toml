@@ -1,4 +1,4 @@
-baseURL = 'https://rustin.me/'
+baseURL = 'https://0xpoe.dev/'
 buildDrafts = false
 buildExpired = false
 buildFuture = false
@@ -42,7 +42,7 @@ title = "Rustin"
 
 [params.editPost]
 Text = "Suggest Changes"
-URL = "https://github.com/Rustin170506/blog/tree/master/content"
+URL = "https://github.com/0xPoe/blog/tree/master/content"
 appendFilePath = true
 
 
@@ -82,7 +82,7 @@ weight = 5
 [[params.socialIcons]]
 name = "github"
 title = "View Source on Github"
-url = "https://github.com/Rustin170506"
+url = "https://github.com/0xPoe"
 
 [[params.socialIcons]]
 name = "YouTube"

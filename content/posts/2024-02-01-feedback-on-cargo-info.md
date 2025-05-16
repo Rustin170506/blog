@@ -173,7 +173,7 @@ required by
     Proposal:
 
     - From @epage: Dependencies are mostly an implementation detail (except public) but people sometimes care, so I figure that holding off on private dependencies to --verbose might buy us more space.
-    - From @Rustin170506: How about we show all the dependencies and only show the dev-dependencies and build-dependencies for a --verbose. I guess checking its dependencies before you use it in your project would always be considered.
+    - From @0xPoe: How about we show all the dependencies and only show the dev-dependencies and build-dependencies for a --verbose. I guess checking its dependencies before you use it in your project would always be considered.
 
 3. How should we render features? [cargo-information#26]
 
@@ -189,7 +189,7 @@ required by
 
 4. What version should we default to within a workspace? What if it isn't the direct dependency but is a transitive dependency? [cargo-information#29]
 
-[cargo-information#20]: https://github.com/Rustin170506/cargo-information/issues/20
-[cargo-information#23]: https://github.com/Rustin170506/cargo-information/issues/23
-[cargo-information#26]: https://github.com/Rustin170506/cargo-information/issues/26
-[cargo-information#29]: https://github.com/Rustin170506/cargo-information/issues/29
+[cargo-information#20]: https://github.com/0xPoe/cargo-information/issues/20
+[cargo-information#23]: https://github.com/0xPoe/cargo-information/issues/23
+[cargo-information#26]: https://github.com/0xPoe/cargo-information/issues/26
+[cargo-information#29]: https://github.com/0xPoe/cargo-information/issues/29

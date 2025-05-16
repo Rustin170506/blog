@@ -6,9 +6,9 @@ tags: ["go", "pingcap", "tidb"]
 categories: ["Go"]
 ---
 
-大家好，我是 [Rustin](https://github.com/Rustin170506) 。今天想跟大家简单介绍一下如何使用一些 golang 的静态代码检查工具来提升代码质量！
+大家好，我是 [Rustin](https://github.com/0xPoe) 。今天想跟大家简单介绍一下如何使用一些 golang 的静态代码检查工具来提升代码质量！
 
-此博客在 [GitHub](https://github.com/Rustin170506/blog) 上公开发布. 如果您有任何问题或疑问，请在此处打开一个 [issue](https://github.com/Rustin170506/blog/issues)。
+此博客在 [GitHub](https://github.com/0xPoe/blog) 上公开发布. 如果您有任何问题或疑问，请在此处打开一个 [issue](https://github.com/0xPoe/blog/issues)。
 
 ## 简介
 
@@ -17,14 +17,14 @@ categories: ["Go"]
 
 我经过一些研究，决定使用 [unconvert](https://github.com/mdempsky/unconvert) 来检测无效的类型转换，然后在这个 [PR](https://github.com/pingcap/tidb/pull/16549) 解决了这个问题。
 **最近我终于有机会在公司写 Go了，所以我也想在公司的项目上配置和使用一些静态检查工具来提升代码质量。** 在经过一下午的努力之后终于把 TiDB 的大部分检查工具移植到了公司项目上，并且在 github 上创建了一个模板项目
-[go-boilerplate](https://github.com/Rustin170506/go-boilerplate) 。下面我就简单介绍一下这个模板的构建过程和使用的方式。
+[go-boilerplate](https://github.com/0xPoe/go-boilerplate) 。下面我就简单介绍一下这个模板的构建过程和使用的方式。
 
 ## init 项目，添加代码
 
 我最近使用的 Go 版本 1.13.8，所以就使用 go mod 来初始化和管理项目。
 
 ```shell
- go mod init github.com/Rustin170506/go-boilerplate
+ go mod init github.com/0xPoe/go-boilerplate
 ```
 
 然后我添加了 main 文件和一个用作例子的 foo 文件，目录结构如下所示：
@@ -112,13 +112,13 @@ GOTEST          := $(GO) test -p $(P)
 # 获取项目的包和包中的文件
 PACKAGE_LIST  := go list ./...
 PACKAGES  := $$($(PACKAGE_LIST))
-PACKAGE_DIRECTORIES := $(PACKAGE_LIST) | sed 's|github.com/Rustin170506/$(PROJECT)||'
+PACKAGE_DIRECTORIES := $(PACKAGE_LIST) | sed 's|github.com/0xPoe/$(PROJECT)||'
 FILES     := $$(find $$($(PACKAGE_DIRECTORIES)) -name "*.go")
 ```
 
 这些通用的变量中有两个地方需要注意：
    - 我们定义了一个 FAIL_ON_STDOUT 的 [awk](https://zh.wikipedia.org/zh-hans/AWK) 命令，该命令会检测是否有错误信息输出，我们在后面会多次使用到该命令。NR 是内置的变量表示 number of record。如果我们检测到其他输出信息就失败退出（**输出信息也就是错误信息，我们会做输出重定向**）。
-   - 我们匹配和查找出了包下的所有 go 文件，因为我这只是个简单的模板项目没有其他的 package，所以我在 [sed](https://zh.wikipedia.org/wiki/Sed) 中只替换和匹配了第一层 package：`sed 's|github.com/Rustin170506/$(PROJECT)||'`。如果你有很多子 package，就需要修改这个替换规则。
+   - 我们匹配和查找出了包下的所有 go 文件，因为我这只是个简单的模板项目没有其他的 package，所以我在 [sed](https://zh.wikipedia.org/wiki/Sed) 中只替换和匹配了第一层 package：`sed 's|github.com/0xPoe/$(PROJECT)||'`。如果你有很多子 package，就需要修改这个替换规则。
 
 
 ## 添加工具，创建命令
@@ -128,7 +128,7 @@ FILES     := $$(find $$($(PACKAGE_DIRECTORIES)) -name "*.go")
 ```shell
 mkdir tools/check
 cd tools/check
-go mod init github.com/Rustin170506/go-boilerplate/_tools
+go mod init github.com/0xPoe/go-boilerplate/_tools
 ```
 初始化 tools 模块之后目录结构如下：
 
@@ -370,7 +370,7 @@ diff -q go.sum /tmp/go.sum.before
 
 ## 整合命令，快速检测
 
-在上面我们定义好了编译和检测的命令，你可以在这里找到完整的 [Makefile](https://github.com/Rustin170506/go-boilerplate/blob/master/Makefile) 文件。
+在上面我们定义好了编译和检测的命令，你可以在这里找到完整的 [Makefile](https://github.com/0xPoe/go-boilerplate/blob/master/Makefile) 文件。
 
 除了检查的命令，我们也可以定义一些常用的开发命令：
 ```text
@@ -397,7 +397,7 @@ check: fmt errcheck unconvert lint tidy check-static vet staticcheck goword
 
 我们整合出了两个命令，一个是 check 它会执行所有的检测任务，另外一个是 dev 它不仅可以进行检查还跑了单元测试。我们在开发完成之后就可以进行检测并提交，甚至将其作为 CI 任务运行。
 
-**到此为止，我们就基本完善了项目的静态检查工具链。该项目在 github 整理作为 [template 项目](https://github.com/Rustin170506/go-boilerplate) 开源，大家可以直接使用 [github template](https://github.com/Rustin170506/go-boilerplate/generate) 功能初始化你的项目。**
+**到此为止，我们就基本完善了项目的静态检查工具链。该项目在 github 整理作为 [template 项目](https://github.com/0xPoe/go-boilerplate) 开源，大家可以直接使用 [github template](https://github.com/0xPoe/go-boilerplate/generate) 功能初始化你的项目。**
 希望这篇文章对你集成静态代码分析工具有帮助！
 
 ---

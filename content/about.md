@@ -23,5 +23,5 @@ Languages I speak:
 [TiCDC]: https://github.com/pingcap/tiflow
 [cargo]: https://github.com/rust-lang/cargo
 [crates.io]: https://github.com/rust-lang/crates.io
-[submit a new issue]: https://github.com/Rustin170506/Rustin170506/issues/new
+[submit a new issue]: https://github.com/0xPoe/0xPoe/issues/new
 

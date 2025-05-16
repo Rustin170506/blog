@@ -13,8 +13,8 @@ categories: ["TiCDC"]
 
 我来介绍一下目前 TiCDC 接入 Flink 的现状和方法。
 
-此博客在 [GitHub](https://github.com/Rustin170506/blog) 上公开发布.
-如果您有任何问题或疑问，请在此处打开一个 [issue](https://github.com/Rustin170506/blog/issues).
+此博客在 [GitHub](https://github.com/0xPoe/blog) 上公开发布.
+如果您有任何问题或疑问，请在此处打开一个 [issue](https://github.com/0xPoe/blog/issues).
 
 ## 简介
 
@@ -96,7 +96,7 @@ RUN wget -P /opt/flink/lib/ https://repo1.maven.org/maven2/org/apache/flink/flin
 我们克隆该仓库之后在根目录通过一条命令就可以启动一个 Kafka 和 Flink 集群。
 
 ```shell
-git clone https://github.com/Rustin170506/ticdc-test-compose
+git clone https://github.com/0xPoe/ticdc-test-compose
 cd ticdc-test-compose
 docker-compose -f ./docker-compose-flink.yaml up -d
 ```
@@ -226,7 +226,7 @@ from topic_test;
 
 [v5.4 分支]: https://github.com/pingcap/tiflow/tree/release-5.4
 
-[ticdc-test-compose]: https://github.com/Rustin170506/ticdc-test-compose
+[ticdc-test-compose]: https://github.com/0xPoe/ticdc-test-compose
 
 [Kafka Sink]: https://docs.pingcap.com/tidb/stable/manage-ticdc#configure-sink-uri-with-kafka
 

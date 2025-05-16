@@ -5,4 +5,4 @@ tags: ["TiDB", "Analyze", "Golang"]
 categories: ["TiDB", "Distributed System"]
 ---
 
-<iframe src="https://tidb-analyze.slides.rustin.me/" width="100%" height="500px" frameborder="0" allowfullscreen></iframe>
+<iframe src="https://tidb-analyze.slides.0xpoe.dev/" width="100%" height="500px" frameborder="0" allowfullscreen></iframe>

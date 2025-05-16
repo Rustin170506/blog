@@ -8,11 +8,11 @@ categories: ["TiCDC"]
 
 我近半年的时间都在做 [TiCDC] [Sink 模块]的改造工作，目前新的 Sink 实现已经成功替换了旧的实现。最近有客户希望通过自己实现 Sink 的方式来接入 TiCDC，所以我想把这段时间的改造和设计经验分享出来，希望能帮助到大家。
 
-此博客在 [GitHub](https://github.com/Rustin170506/rustin.me) 上公开发布。 如果您有任何问题，请在此处打开一个 [issue](https://github.com/Rustin170506/rustin.me/issues)。
+此博客在 [GitHub](https://github.com/0xPoe/0xpoe.dev) 上公开发布。 如果您有任何问题，请在此处打开一个 [issue](https://github.com/0xPoe/0xpoe.dev/issues)。
 
 > ⚠️ 注意：
 > 1. 该指南主要面向开发者，如果您只是想使用 TiCDC，请参阅 [TiCDC 使用文档](https://docs.pingcap.com/zh/tidb/stable/ticdc-overview)。
-> 2. 在阅读该指南前，请先阅读 [TiCDC 架构和数据同步链路解析](https://rustin.me/TiCDC-%E6%9E%B6%E6%9E%84%E5%92%8C%E6%95%B0%E6%8D%AE%E5%90%8C%E6%AD%A5%E9%93%BE%E8%B7%AF%E8%A7%A3%E6%9E%90/)了解 TiCDC 的基本架构和数据同步流程。
+> 2. 在阅读该指南前，请先阅读 [TiCDC 架构和数据同步链路解析](https://0xpoe.dev/TiCDC-%E6%9E%B6%E6%9E%84%E5%92%8C%E6%95%B0%E6%8D%AE%E5%90%8C%E6%AD%A5%E9%93%BE%E8%B7%AF%E8%A7%A3%E6%9E%90/)了解 TiCDC 的基本架构和数据同步流程。
 
 ## 基本概念
 
