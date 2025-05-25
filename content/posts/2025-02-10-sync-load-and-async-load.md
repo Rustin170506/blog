@@ -56,26 +56,21 @@ The handler is implemented as follows:
 
 ```go
 type statsSyncLoad struct {
-	statsHandle statstypes.StatsHandle
-	is          infoschema.InfoSchema
-	StatsLoad   statstypes.StatsLoad
-}
-
-type StatsLoad struct {
-	NeededItemsCh  chan *NeededItemTask
-	TimeoutItemsCh chan *NeededItemTask
-	sync.Mutex
+	statsHandle    statstypes.StatsHandle
+	neededItemsCh  chan *statstypes.NeededItemTask
+	timeoutItemsCh chan *statstypes.NeededItemTask
+	...
 }
 ```
 
-The core of the sync load handler is the `StatsLoad` structure, which contains two channels: `NeededItemsCh` and `TimeoutItemsCh`. The `NeededItemsCh` channel is used to submit load requests, while the `TimeoutItemsCh` channel is used to handle timeout events.
+The core of the sync load handler is the `statsSyncLoad` structure, which contains two channels: `NeededItemsCh` and `TimeoutItemsCh`. The `NeededItemsCh` channel is used to submit load requests, while the `TimeoutItemsCh` channel is used to handle timeout events.
 
 The handler implementation can be divided into three parts:
 1. Send requests to the handler
 2. Load statistics concurrently
 3. Wait for the statistics to be loaded
 
-`statsSyncLoad` provides the `SendLoadRequests` method to allow the optimizer to send load requests to the handler.
+`statsSyncLoad` provides the `SendLoadRequests` method to allow the optimizer to submit load requests to the handler.
 
 ```go
 func (s *statsSyncLoad) SendLoadRequests(sc *stmtctx.StatementContext, neededHistItems []model.StatsLoadItem, timeout time.Duration) error {
@@ -125,41 +120,26 @@ The `SendLoadRequests` method first filters out columns that have already been l
 
 This design ensures efficient handling of statistics loading requests while preventing duplicate loads for the different queries from different sessions.
 
-A thing to note is that we maintain the `ResultCh` and `NeededItems` in the `stmtctx.StatementContext` to keep track of the loading status for each statement from each session. This is a key point to track the loading status for each statement (query).
+**A thing to note is that we maintain the `ResultCh` and `NeededItems` in the `stmtctx.StatementContext` to keep track of the loading status for each statement from each session. This is a key point to track the loading status for each statement (query).**
 
 After sending the load tasks, the optimizer waits for the statistics to be loaded. This process is implemented in the `WaitLoadFinished` method.
 
 ```go
 func (*statsSyncLoad) SyncWaitStatsLoad(sc *stmtctx.StatementContext) error {
 	...
-	var errorMsgs []string
-	defer func() {
-		if len(errorMsgs) > 0 {
-			logutil.BgLogger().Warn("SyncWaitStatsLoad meets error",
-				zap.Strings("errors", errorMsgs))
-		}
-		sc.StatsLoad.NeededItems = nil
-	}()
 	resultCheckMap := map[model.TableItemID]struct{}{}
 	for _, col := range sc.StatsLoad.NeededItems {
 		resultCheckMap[col.TableItemID] = struct{}{}
 	}
-	timer := time.NewTimer(sc.StatsLoad.Timeout)
-	defer timer.Stop()
+	...
 	for _, resultCh := range sc.StatsLoad.ResultCh {
 		select {
 		case result, ok := <-resultCh:
 			...
-			if !ok {
-				return errors.New("sync load stats channel closed unexpectedly")
-			}
-			// this error is from statsSyncLoad.SendLoadRequests which start to task and send task into worker,
-			// not the stats loading error
 			if result.Err != nil {
 				errorMsgs = append(errorMsgs, result.Err.Error())
 			} else {
 				val := result.Val.(stmtctx.StatsLoadResult)
-				// this error is from the stats loading error
 				if val.HasError() {
 					errorMsgs = append(errorMsgs, val.ErrorMsg())
 				}
@@ -188,10 +168,7 @@ To handle the tasks, `statsSyncLoad` utilizes multiple sub-workers to load stati
 
 ```go
 func (s *statsSyncLoad) SubLoadWorker(sctx sessionctx.Context, exit chan struct{}, exitWg *util.WaitGroupEnhancedWrapper) {
-	defer func() {
-		exitWg.Done()
-		logutil.BgLogger().Info("SubLoadWorker exited.")
-	}()
+	...
 	var lastTask *statstypes.NeededItemTask
 	for {
 		task, err := s.HandleOneTask(sctx, lastTask, exit)
