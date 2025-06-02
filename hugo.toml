@@ -2,7 +2,7 @@ baseURL = 'https://0xpoe.dev/'
 buildDrafts = false
 buildExpired = false
 buildFuture = false
-copyright = '© 2025 Poe'
+copyright = '© 2025 Dongpo'
 enableEmoji = true
 enableInlineShortcodes = true
 enableRobotsTXT = true
@@ -10,7 +10,7 @@ languageCode = 'en-us'
 mainSections = ['posts']
 pygmentsUseClasses = true
 theme = 'PaperMod'
-title = 'Poe'
+title = 'Dongpo'
 
 
 [params]
@@ -23,10 +23,10 @@ ShowReadingTime = true
 ShowRssButtonInSectionTermList = true
 ShowShareButtons = false
 ShowToc = true
-author = "Poe liu"
+author = "Dongpo Liu"
 comments = true
 defaultTheme = "auto"
-description = "Poe's personal blog"
+description = "Dongpo's personal blog"
 displayFullLangName = true
 env = "production"
 
@@ -34,11 +34,11 @@ env = "production"
 [params.profileMode]
 enabled = true
 imageHeight = 120
-imageTitle = "Poe"
+imageTitle = "Dongpo"
 imageUrl = "https://avatars.githubusercontent.com/u/29879298?v=4"
 imageWidth = 120
-subtitle = "👋 My name is Poe Liu and I’m a passionate software engineer who specializes in distributed systems and dev tools."
-title = "Poe"
+subtitle = "👋 My name is Dongpo Liu and I’m a passionate software engineer who specializes in distributed systems and dev tools."
+title = "Dongpo"
 
 [params.editPost]
 Text = "Suggest Changes"
