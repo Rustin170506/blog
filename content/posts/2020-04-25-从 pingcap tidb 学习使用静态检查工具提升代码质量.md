@@ -6,7 +6,7 @@ tags: ["go", "pingcap", "tidb"]
 categories: ["Go"]
 ---
 
-大家好，我是 [Poe](https://github.com/0xPoe) 。今天想跟大家简单介绍一下如何使用一些 golang 的静态代码检查工具来提升代码质量！
+大家好，我是 [Dongpo](https://github.com/0xPoe) 。今天想跟大家简单介绍一下如何使用一些 golang 的静态代码检查工具来提升代码质量！
 
 此博客在 [GitHub](https://github.com/0xPoe/blog) 上公开发布. 如果您有任何问题或疑问，请在此处打开一个 [issue](https://github.com/0xPoe/blog/issues)。
 

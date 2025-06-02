@@ -6,7 +6,7 @@ tags: ["TiDB", "PingCAP", "TiKV"]
 categories: ["Distributed System"]
 ---
 
-大家好，我是 [Poe](https://github.com/0xPoe). 最近开始做贵司推出的 TiDB High Performance 课程，所以开个课程实验记录的坑！
+大家好，我是 [Dongpo](https://github.com/0xPoe). 最近开始做贵司推出的 TiDB High Performance 课程，所以开个课程实验记录的坑！
 
 此博客在 [GitHub](https://github.com/0xPoe/blog) 上公开发布. 如果您有任何问题或疑问，请在此处打开一个 [issue](https://github.com/0xPoe/blog/issues).
 

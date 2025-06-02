@@ -6,7 +6,7 @@ tags: ["Ant Design", "React", "UI"]
 categories: ["UI"]
 ---
 
-大家好，我是 Poe。今天想跟大家介绍下如何快速的成为 antd 的贡献者，希望能够对想要加入 antd 社区贡献的同学有帮助！
+大家好，我是 Dongpo。今天想跟大家介绍下如何快速的成为 antd 的贡献者，希望能够对想要加入 antd 社区贡献的同学有帮助！
 
 此博客在 [GitHub](https://github.com/0xPoe/blog) 上公开发布. 如果您有任何问题或疑问，请在此处打开一个 [issue](https://github.com/0xPoe/blog/issues)。
 
