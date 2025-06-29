@@ -29,6 +29,7 @@ defaultTheme = "auto"
 description = "Dongpo's personal blog"
 displayFullLangName = true
 env = "production"
+hideSummary = true
 
 
 [params.profileMode]
@@ -78,6 +79,10 @@ name = "Tags"
 url = "tags/"
 weight = 5
 
+[[languages.en.menu.main]]
+name = "Logs"
+url = "logs/"
+weight = 6
 
 [[params.socialIcons]]
 name = "github"
