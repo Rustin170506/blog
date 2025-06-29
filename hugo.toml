@@ -65,23 +65,23 @@ url = "presentations/"
 weight = 2
 
 [[languages.en.menu.main]]
+name = "Logs"
+url = "logs/"
+weight = 3
+
+[[languages.en.menu.main]]
 name = "About"
 url = "about"
-weight = 3
+weight = 4
 
 [[languages.en.menu.main]]
 name = "Search"
 url = "search/"
-weight = 4
+weight = 5
 
 [[languages.en.menu.main]]
 name = "Tags"
 url = "tags/"
-weight = 5
-
-[[languages.en.menu.main]]
-name = "Logs"
-url = "logs/"
 weight = 6
 
 [[params.socialIcons]]
